@@ -41,7 +41,12 @@ struct PICSFieldSolve <: ParticleInCell.AbstractSimulationStep
                 ifelse.(It .<= size(Ksq_inv) ./ 2, It .- 1, It .- size(Ksq_inv) .- 1) ./
                 sim_lengths
 
-            inv_Ksqs = 1 ./ (ks.^2 .* epsilon_0)
+            kdxs = ks .* cell_lengths
+            cs = cos.(kdxs)
+
+            ips = (1 ./ cell_lengths.^2) .* (48 .- 9 .* cs .- 36 .* cs.^2 .- 3 .* cs.^3) ./ (5 .* (2 .+ cs).^2)
+
+            inv_Ksqs = 1 ./ (ips .* epsilon_0)
             if any(x -> x == 1, It)
                 Ksq_inv[I] = 0
             else

@@ -276,7 +276,7 @@ end
 # make_algo_data(ecpic2_five_sim_func, "ecpic2_five")
 # make_algo_data(ecpic1_five_sim_func, "ecpic1_five", norm_num_macros=10)
 # make_algo_data(ecpic2_five_sim_func, "ecpic2_five", norm_num_macros=100)
-# make_algo_data(pics_sim_func, "pics")
+make_algo_data(pics_sim_func, "pics")
 
 function make_accuracy_data(sim_func, algo_name)
     mkpath("data")
@@ -300,13 +300,13 @@ function make_accuracy_data(sim_func, algo_name)
         # CSV.write("data/algo=$(algo_name)_nw=$(nw)_alt3.csv", df)
     end
 end
-make_accuracy_data(mcpic1_sim_func, "mcpic1")
-make_accuracy_data(ecpic1_sim_func, "ecpic1")
-make_accuracy_data(ecpic2_sim_func, "ecpic2")
-make_accuracy_data(ecpic2_new_sim_func, "ecpic2_new")
+# make_accuracy_data(mcpic1_sim_func, "mcpic1")
+# make_accuracy_data(ecpic1_sim_func, "ecpic1")
+# make_accuracy_data(ecpic2_sim_func, "ecpic2")
+# make_accuracy_data(ecpic2_new_sim_func, "ecpic2_new")
 # make_accuracy_data(ecpic1_five_sim_func, "ecpic1_five")
-make_accuracy_data(ecpic2_five_sim_func, "ecpic2_five")
-make_accuracy_data(pics_sim_func, "pics")
+# make_accuracy_data(ecpic2_five_sim_func, "ecpic2_five")
+# make_accuracy_data(pics_sim_func, "pics")
 
 function make_timestep_data(sim_func, algo_name)
     mkpath("data")
