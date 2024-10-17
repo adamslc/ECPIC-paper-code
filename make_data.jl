@@ -3,10 +3,11 @@ using Makie
 using DataFrames
 using CSV
 using FFTW
+using ProgressMeter
 
 include("pics.jl")
 
-function run_simulation(sim_func, norm_therm_vel, norm_beam_vel; num_cells=16, norm_dt=1e-4, norm_num_macros=10, num_periods=10, norm_perturb_vel=0.00001, norm_wavenumber=1)
+function run_simulation(sim_func, norm_therm_vel, norm_beam_vel; num_cells=16, norm_dt=1e-3, norm_num_macros=10, num_periods=10, norm_perturb_vel=0.00001, norm_wavenumber=1)
     # Create grid
     sim_length = 1.0
     grid = UniformCartesianGrid((0.0,), (sim_length,), (num_cells,), (true,))
@@ -28,8 +29,7 @@ function run_simulation(sim_func, norm_therm_vel, norm_beam_vel; num_cells=16, n
     thermal_velocity = norm_therm_vel * plasma_freq * dx
     beam_velocity = norm_beam_vel * plasma_freq * dx
 
-    # @show perturb_velocity thermal_velocity beam_velocity
-    @show norm_perturb_vel norm_beam_vel norm_therm_vel norm_wavenumber
+    @show sim_func norm_perturb_vel norm_beam_vel norm_therm_vel norm_wavenumber
 
     # positions = (collect(0:num_macros-1) .+ 0.5) ./ num_macros
     positions = collect(0:num_macros-1) ./ num_macros
@@ -62,7 +62,7 @@ function run_simulation(sim_func, norm_therm_vel, norm_beam_vel; num_cells=16, n
 
     # Run simulation
     sim_time = 0.0
-    for n = 1:num_steps
+    @showprogress for n = 1:num_steps
         step!(sim)
         sim_time += dt
 
@@ -257,26 +257,26 @@ function ecpic2_five_sim_func(grid, electrons, dt)
     return sim, (; rho, phi, Eedge, Enode)
 end
 
-function make_algo_data(sim_func, algo_name; norm_num_macros=100)
+function make_algo_data(sim_func, algo_name; norm_num_macros=1000)
     mkpath("data")
 
     norm_beam_vels = collect(range(0.0, 0.4, step=0.01))
     norm_therm_vels = collect(range(0.0, 0.2, step=0.01))
     for norm_therm_vel = norm_therm_vels, norm_beam_vel = norm_beam_vels
-        df = @time run_simulation(sim_func, norm_therm_vel, norm_beam_vel; norm_num_macros)
+        df = @time run_simulation(sim_func, norm_therm_vel, norm_beam_vel; norm_num_macros, norm_perturb_vel=0.0)
 
         CSV.write("data/algo=$(algo_name)_bm=$(norm_beam_vel)_tm=$(norm_therm_vel).csv", df)
     end
 end
-make_algo_data(mcpic1_sim_func, "mcpic1")
-make_algo_data(ecpic1_sim_func, "ecpic1")
-make_algo_data(ecpic2_sim_func, "ecpic2")
-make_algo_data(ecpic2_new_sim_func, "ecpic2_new")
-make_algo_data(ecpic1_five_sim_func, "ecpic1_five")
-make_algo_data(ecpic2_five_sim_func, "ecpic2_five")
+# make_algo_data(mcpic1_sim_func, "mcpic1")
+# make_algo_data(ecpic1_sim_func, "ecpic1")
+# make_algo_data(ecpic2_sim_func, "ecpic2")
+# make_algo_data(ecpic2_new_sim_func, "ecpic2_new")
+# make_algo_data(ecpic1_five_sim_func, "ecpic1_five")
+# make_algo_data(ecpic2_five_sim_func, "ecpic2_five")
 # make_algo_data(ecpic1_five_sim_func, "ecpic1_five", norm_num_macros=10)
 # make_algo_data(ecpic2_five_sim_func, "ecpic2_five", norm_num_macros=100)
-make_algo_data(pics_sim_func, "pics")
+# make_algo_data(pics_sim_func, "pics")
 
 function make_accuracy_data(sim_func, algo_name)
     mkpath("data")
@@ -287,7 +287,7 @@ function make_accuracy_data(sim_func, algo_name)
     for nw in norm_wavenumbers
         # df = @time run_simulation(sim_func, 0., 0.; num_cells=512, norm_dt=1e-4, num_periods=3, norm_wavenumber=nw, norm_num_macros=1, norm_perturb_vel=1e-6)
         # df = @time run_simulation(sim_func, 0., 0.; num_cells=512, norm_dt=1e-5, num_periods=3, norm_wavenumber=nw, norm_num_macros=1, norm_perturb_vel=1e-6)
-        df = @time run_simulation(sim_func, 0., 0.; num_cells=128, norm_dt=1e-4, num_periods=3, norm_wavenumber=nw, norm_num_macros=10, norm_perturb_vel=0.1)
+        df = @time run_simulation(sim_func, 0., 0.; num_cells=128, norm_dt=1e-3, num_periods=3, norm_wavenumber=nw, norm_num_macros=1000, norm_perturb_vel=0.1)
 
         CSV.write("data/algo=$(algo_name)_nw=$(nw).csv", df)
         # CSV.write("data/algo=$(algo_name)_nw=$(nw)_ppc.csv", df)
@@ -300,13 +300,13 @@ function make_accuracy_data(sim_func, algo_name)
         # CSV.write("data/algo=$(algo_name)_nw=$(nw)_alt3.csv", df)
     end
 end
-# make_accuracy_data(mcpic1_sim_func, "mcpic1")
-# make_accuracy_data(ecpic1_sim_func, "ecpic1")
-# make_accuracy_data(ecpic2_sim_func, "ecpic2")
-# make_accuracy_data(ecpic2_new_sim_func, "ecpic2_new")
+make_accuracy_data(mcpic1_sim_func, "mcpic1")
+make_accuracy_data(ecpic1_sim_func, "ecpic1")
+make_accuracy_data(ecpic2_sim_func, "ecpic2")
+make_accuracy_data(ecpic2_new_sim_func, "ecpic2_new")
 # make_accuracy_data(ecpic1_five_sim_func, "ecpic1_five")
-# make_accuracy_data(ecpic2_five_sim_func, "ecpic2_five")
-# make_accuracy_data(pics_sim_func, "pics")
+make_accuracy_data(ecpic2_five_sim_func, "ecpic2_five")
+make_accuracy_data(pics_sim_func, "pics")
 
 function make_timestep_data(sim_func, algo_name)
     mkpath("data")
