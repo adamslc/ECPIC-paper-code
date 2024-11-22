@@ -49,6 +49,8 @@ struct PICSFieldSolve <: ParticleInCell.AbstractSimulationStep
             inv_Ksqs = 1 ./ (ips .* epsilon_0)
             if any(x -> x == 1, It)
                 Ksq_inv[I] = 0
+            # elseif any(k -> isapprox(abs(k), pi), ks .* cell_lengths)
+            #     Ksq_inv[I] = 0
             else
                 Ksq_inv[I] = prod(inv_Ksqs)
             end
@@ -56,6 +58,7 @@ struct PICSFieldSolve <: ParticleInCell.AbstractSimulationStep
             cks = (-12 ./ cell_lengths.^2) .* sin.(ks .* cell_lengths ./ 2) ./ (2 .+ cos.(ks .* cell_lengths))
             c_k[I] = prod(cks)
         end
+
 
         fft_plan = plan_fft!(ft_vector0)
 

@@ -257,11 +257,12 @@ function ecpic2_five_sim_func(grid, electrons, dt)
     return sim, (; rho, phi, Eedge, Enode)
 end
 
-function make_algo_data(sim_func, algo_name; norm_num_macros=1000)
+function make_algo_data(sim_func, algo_name; norm_num_macros=1000, num_cells=16)
     mkpath("data")
 
     norm_beam_vels = collect(range(0.0, 0.4, step=0.01))
-    norm_therm_vels = collect(range(0.0, 0.2, step=0.01))
+    # norm_therm_vels = collect(range(0.0, 0.2, step=0.01))
+    norm_therm_vels = collect(range(0.21, 0.35, step=0.01))
     for norm_therm_vel = norm_therm_vels, norm_beam_vel = norm_beam_vels
         df = @time run_simulation(sim_func, norm_therm_vel, norm_beam_vel; norm_num_macros, norm_perturb_vel=0.0)
 
@@ -276,7 +277,28 @@ end
 # make_algo_data(ecpic2_five_sim_func, "ecpic2_five")
 # make_algo_data(ecpic1_five_sim_func, "ecpic1_five", norm_num_macros=10)
 # make_algo_data(ecpic2_five_sim_func, "ecpic2_five", norm_num_macros=100)
-make_algo_data(pics_sim_func, "pics")
+# make_algo_data(pics_sim_func, "pics")
+# make_algo_data(pics_sim_func, "pics_nyquist_filter")
+# make_algo_data(pics_sim_func, "pics_nyquist_filter_more_cells"; num_cells=32)
+
+function make_stationary_algo_data(sim_func, algo_name; norm_num_macros=1000, num_cells=16)
+    mkpath("data")
+
+    # norm_therm_vels = collect(range(0.0, 0.3, step=0.01))
+    # norm_therm_vels = collect(range(0.16, 0.2, step=0.01))
+    norm_therm_vels = [0.16, 0.17, 0.15]
+    for norm_therm_vel = norm_therm_vels
+        df = @time run_simulation(sim_func, norm_therm_vel, 0.0; norm_num_macros, norm_perturb_vel=0.0, norm_dt=1.0, num_periods=50, num_cells=8)
+
+        CSV.write("data/algo=$(algo_name)_bm=0.0_tm=$(norm_therm_vel)_ppc=$(norm_num_macros).csv", df)
+    end
+end
+# make_stationary_algo_data(mcpic1_sim_func, "mcpic1")
+# make_stationary_algo_data(mcpic1_sim_func, "mcpic1"; norm_num_macros=10000)
+# make_stationary_algo_data(mcpic1_sim_func, "mcpic1"; norm_num_macros=100000)
+# make_stationary_algo_data(mcpic1_sim_func, "mcpic1"; norm_num_macros=1000000)
+# make_stationary_algo_data(mcpic1_sim_func, "mcpic1"; norm_num_macros=10000000)
+make_stationary_algo_data(mcpic1_sim_func, "mcpic1"; norm_num_macros=100000000)
 
 function make_accuracy_data(sim_func, algo_name)
     mkpath("data")
