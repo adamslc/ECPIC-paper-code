@@ -24,8 +24,8 @@ function compute_fit(xs, ys; growth_cutoff=-3)
 
     fit = curve_fit(model, new_xs, log_ys, [1e-12, log_ys[1]])
 
-    if log10(ys[end]) < growth_cutoff
-        @info "Growth rate too small" coef(fit) log10(ys[end]) log_ys[end]
+    if log10(abs(ys[1])) < growth_cutoff
+        # @info "Growth rate too small" coef(fit) log10(ys[end]) log_ys[end]
         return [0.0, 0.0]
     end
 
@@ -50,38 +50,7 @@ end
 
 @. exp_model(x, p) = exp((p[1] * x) + p[2])
 
-function make_fit_plot(df; num_bins=10, show_fits=false)
-    # fig, ax, plt = lines(df[!, :norm_time], log10.(df[!, :thermal_energy]), color=:blue)
-    fig, ax, plt = lines(df[!, :norm_time], abs.(df[!, :thermal_energy] .- df[1, :thermal_energy]) ./ df[1, :thermal_energy], color=:blue)
-
-    ax.limits = (nothing, (1e-6, nothing))
-    ax.yscale = log10
-
-    if show_fits
-        fits = compute_fits(df, num_bins)
-        for i in 1:num_bins
-            si = round(Int, (i - 1)*length(df[!, :norm_time]) / num_bins) + 1
-            ei = min(round(Int, i*length(df[!, :norm_time]) / num_bins) + 1, length(df[!, :norm_time]))
-
-            fit = fits[i]
-            println(fit)
-
-            xs = [df[si, :norm_time], df[ei, :norm_time]]
-            ys = exp_model(xs, fit)
-
-            lines!(ax, xs, ys, color=:black)
-        end
-    end
-
-    # lines!(ax, df[!, :norm_time], df[!, :field_energy], color=:red)
-    # lines!(ax, df[!, :norm_time], df[!, :beam_energy], color=:green)
-    # lines!(ax, df[!, :norm_time], df[!, :beam_energy] + df[!, :thermal_energy] + df[!, :field_energy], color=:black)
-
-    save("fit.pdf", fig)
-    # save("fit.png", fig)
-end
-
-function make_combo_fit_plot_axis(ax, df; num_bins=10, show_fits=true, growth_cutoff=-3)
+function make_combo_fit_plot_axis(ax, df; num_bins=10, show_fits=true, growth_cutoff=-2)
     ax.xgridvisible = false
     ax.ygridvisible = false
     ax.ylabel = L"|\Delta E_\text{th}| / E_\text{th}(0)"
@@ -124,13 +93,13 @@ function make_fit_plot2(df; num_bins=10, show_fits=false)
     save("fit.pdf", fig)
 end
 
-function make_combo_fit_plot(; num_bins=10)
+function make_combo_fit_plot(; num_bins=10, growth_cutoff=-2)
     fig = Figure(size=(325, 250), fonts=(; regular="Times New Roman"), fontsize=14)
 
     @info "First"
     ax1 = Axis(fig[1, 1], yscale=log10)
     df = CSV.read("data/algo=ecpic1_bm=0.05_tm=0.01.csv", DataFrame)
-    make_combo_fit_plot_axis(ax1, df)
+    make_combo_fit_plot_axis(ax1, df; num_bins, growth_cutoff)
     ax1.xticklabelsvisible = false
     ax1.xticksvisible = false
     ax1.limits = ((0, 10), (1e-6, 1e2))
@@ -139,7 +108,7 @@ function make_combo_fit_plot(; num_bins=10)
     ax2 = Axis(fig[2, 1], yscale=log10)
     # ax2 = Axis(fig[2, 1]) 
     df = CSV.read("data/algo=ecpic1_bm=0.05_tm=0.1.csv", DataFrame)
-    make_combo_fit_plot_axis(ax2, df)
+    make_combo_fit_plot_axis(ax2, df; num_bins, growth_cutoff)
     ax2.xlabel = L"t \omega_p / 2 \pi"
     ax2.limits = ((0, 10), (1e-6, 1e2))
 
@@ -147,20 +116,17 @@ function make_combo_fit_plot(; num_bins=10)
 end
 
 df = CSV.read("data/algo=ecpic1_bm=0.05_tm=0.1.csv", DataFrame)
-# make_fit_plot(df, show_fits=true)
 # make_fit_plot2(df, show_fits=false)
 
-make_combo_fit_plot()
-
-function compute_max_growth_rate(df; num_bins=10)
-    fits = compute_fits(df, num_bins)
+function compute_max_growth_rate(df; num_bins=10, growth_cutoff=-2)
+    fits = compute_fits(df, num_bins; growth_cutoff)
     if num_bins == 1
         return fits[1][1]
     end
     return max(maximum(x -> x[1], fits[2:end]), 0)
 end
 
-function compute_growth_rates(algo)
+function compute_growth_rates(algo; growth_cutoff=-2)
     norm_beam_vels = collect(range(0.0, 0.4, step=0.01))
     norm_therm_vels = collect(range(0.01, 0.35, step=0.01))
 
@@ -169,7 +135,7 @@ function compute_growth_rates(algo)
     for (i, norm_therm_vel) = enumerate(norm_therm_vels), (j, norm_beam_vel) = enumerate(norm_beam_vels)
         try
             df = read_data(algo, norm_beam_vel, norm_therm_vel)
-            growth_rate = compute_max_growth_rate(df)
+            growth_rate = compute_max_growth_rate(df; growth_cutoff)
 
             if growth_rate < 0
                 @warn "Negative growth rate" norm_therm_vel norm_beam_vel growth_rate
@@ -185,12 +151,12 @@ function compute_growth_rates(algo)
     return norm_beam_vels, norm_therm_vels, growth_rates
 end
 
-function make_growth_axis(ax, algo; hidex=false, hidey=false, colorrange=(-4, 0), v_critical=nothing)
+function make_growth_axis(ax, algo; hidex=false, hidey=false, colorrange=(-3, 0), v_critical=nothing, growth_cutoff=-2)
     @info "Making growth axis" algorithm=algo hidex hidey
 
-    norm_beam_vels, norm_therm_vels, growth_rates = compute_growth_rates(algo)
+    norm_beam_vels, norm_therm_vels, growth_rates = compute_growth_rates(algo; growth_cutoff)
 
-    hm = heatmap!(ax, norm_beam_vels, norm_therm_vels, log10.(transpose(growth_rates)); colorrange, colormap=:inferno)
+    hm = heatmap!(ax, norm_beam_vels, norm_therm_vels, log10.(transpose(growth_rates)); colorrange, colormap=:inferno, lowclip=:black)
 
     # ax.xlabel = L"v_b / \omega_p \Delta x"
     # ax.ylabel = L"v_t / \omega_p \Delta x"
@@ -244,115 +210,43 @@ end
 # make_growth_plot("ecpic2_five"; title="ecpic2 w/ 4th order solve")
 # make_growth_plot("pics")
 
-function make_combo_growth_heatmap()
+function make_combo_growth_heatmap(; growth_cutoff=-2)
     # 624 units corresponds to a width of 6.5 inches
     fig = Figure(size=(624, 400))
 
     ax1 = Axis(fig[1,1], aspect=DataAspect(), title="MC-PIC1")
-    hm = make_growth_axis(ax1, "mcpic1", hidex=true)
+    hm = make_growth_axis(ax1, "mcpic1", hidex=true, growth_cutoff=growth_cutoff)
 
     ax2 = Axis(fig[1,2], aspect=DataAspect(), title="EC-PIC1")
-    make_growth_axis(ax2, "ecpic1", hidex=true, hidey=true, v_critical=0.288)
+    make_growth_axis(ax2, "ecpic1", hidex=true, hidey=true, v_critical=0.288, growth_cutoff=growth_cutoff)
 
     ax3 = Axis(fig[1,3], aspect=DataAspect(), title="EC-PIC2-Standard")
-    make_growth_axis(ax3, "ecpic2", hidex=true, hidey=true, v_critical=0.183)
+    make_growth_axis(ax3, "ecpic2", hidex=true, hidey=true, v_critical=0.183, growth_cutoff=growth_cutoff)
 
     ax4 = Axis(fig[2,1], aspect=DataAspect(), title="EC-PIC2-Fourth")
-    hm = make_growth_axis(ax4, "ecpic2_five"; v_critical=0.158)
+    hm = make_growth_axis(ax4, "ecpic2_five"; v_critical=0.158, growth_cutoff=growth_cutoff)
 
     ax5 = Axis(fig[2,2], aspect=DataAspect(), title="EC-PIC2-Lagrange")
-    make_growth_axis(ax5, "ecpic2_new", hidey=true, v_critical=0.316)
+    make_growth_axis(ax5, "ecpic2_new", hidey=true, v_critical=0.316, growth_cutoff=growth_cutoff)
 
     ax6 = Axis(fig[2,3], aspect=DataAspect(), title="CS-PIC")
-    make_growth_axis(ax6, "pics", hidey=true)
+    make_growth_axis(ax6, "pics", hidey=true, growth_cutoff=growth_cutoff)
 
     cbar = Colorbar(fig[:, 4], hm, label=L"\text{(Growth rate)} / \omega_p")
     # cbar.ticks = ([-3, -2, -1, 0], [L"10^{-3}", L"10^{-2}", L"10^{-1}", L"10^{0}"])
     # cbar.ticks = ([-5, -4, -3, -2, -1, 0], [L"10^{-5}",L"10^{-4}", L"10^{-3}", L"10^{-2}", L"10^{-1}", L"10^{0}"])
-    cbar.ticks = ([-4, -2, 0], [L"10^{-4}", L"10^{-2}", L"10^{0}"])
+    cbar.ticks = ([-3, -2, -1, 0], [L"10^{-3}", L"10^{-2}", L"10^{-1}", L"10^{0}"])
 
     save("combo_growth_heatmap.pdf", fig)
 end
 
-# make_combo_growth_heatmap()
-
-function make_combo_growth_heatmap2()
-    # 624 units corresponds to a width of 6.5 inches
-    fig = Figure(size=(624, 300))
-
-    ax1 = Axis(fig[1,1], aspect=DataAspect(), title="MC-PIC1")
-    hm = make_growth_axis(ax1, "mcpic1", hidex=true)
-
-    ax2 = Axis(fig[1,2], aspect=DataAspect(), title="EC-PIC1")
-    make_growth_axis(ax2, "ecpic1", hidex=true, hidey=true, v_critical=0.288)
-
-    ax3 = Axis(fig[1,3], aspect=DataAspect(), title="CS-PIC")
-    make_growth_axis(ax3, "pics", hidex=true, hidey=true)
-
-    ax4 = Axis(fig[2,1], aspect=DataAspect(), title="EC-PIC2-Fourth")
-    hm = make_growth_axis(ax4, "ecpic2_five"; v_critical=0.158)
-
-    ax5 = Axis(fig[2,2], aspect=DataAspect(), title="EC-PIC2-Lagrange")
-    make_growth_axis(ax5, "ecpic2_new", hidey=true, v_critical=0.316)
-
-    ax6 = Axis(fig[2,3], aspect=DataAspect(), title="EC-PIC2-Standard")
-    make_growth_axis(ax6, "ecpic2", hidey=true, v_critical=0.183)
-
-    cbar = Colorbar(fig[:, 4], hm, label=L"\text{(Growth rate)} / \omega_p")
-    # cbar.ticks = ([-3, -2, -1, 0], [L"10^{-3}", L"10^{-2}", L"10^{-1}", L"10^{0}"])
-    # cbar.ticks = ([-5, -4, -3, -2, -1, 0], [L"10^{-5}",L"10^{-4}", L"10^{-3}", L"10^{-2}", L"10^{-1}", L"10^{0}"])
-    cbar.ticks = ([-4, -2, 0], [L"10^{-4}", L"10^{-2}", L"10^{0}"])
-
-    save("combo_growth_heatmap2.pdf", fig)
-end
-
-# make_combo_growth_heatmap2()
-
-function make_timestep_plot(algo; title=algo, scale_line=false)
-    @info "Making timestep plot" algo title scale_line
-    fig = Figure()
-
-    ax1 = Axis(fig[1,1], title=title, xscale=log10, yscale=log10)
-    ax1.xlabel = "Normalized timestep"
-    ax1.ylabel = "Relative error in plasma freq"
-    # ax1.limits = (nothing, (1e-3, 1))
-
-    norm_timesteps = [1.0, 0.1, 0.01, 0.001, 0.0001]
-    measured_plasma_freqs = Float64[]
-    measured_errors = Float64[]
-    for nt in norm_timesteps
-        # df = CSV.read("data/algo=$(algo)_nw=$(nw)_long.csv", DataFrame)
-        df = CSV.read("data/algo=$(algo)_nt=$(nt).csv", DataFrame)
-
-        exact_plasma_freq = 5.685352436149611e8
-        measured_freq = measure_plasma_freq_fit(df[!, :norm_time], df[!, :field_energy])
-
-        push!(measured_plasma_freqs, measured_freq)
-        push!(measured_errors, abs(measured_freq / exact_plasma_freq - 1))
-    end
-
-    scatter!(ax1, norm_timesteps, measured_errors)
-
-    if scale_line
-        p = 1
-        lines!(ax1, norm_timesteps, norm_timesteps.^p / norm_timesteps[1]^p * measured_errors[1], color=:black, linestyle=:dash)
-        p = 2
-        lines!(ax1, norm_timesteps, norm_timesteps.^p / norm_timesteps[1]^p * measured_errors[1], color=:black)
-    end
-
-    save("$(algo)_timestep.pdf", fig)
-end
-# make_timestep_plot("ecpic2_five", scale_line=true)
-# make_timestep_plot("mcpic1", scale_line=true)
-
-
-function compute_stationary_growth_rates(algo, ppc; norm_therm_vels = collect(range(0.01, 0.3, step=0.01)), num_bins=10)
+function compute_stationary_growth_rates(algo, ppc; norm_therm_vels = collect(range(0.01, 0.3, step=0.01)), num_bins=10, growth_cutoff=-2)
     growth_rates = Vector{Float64}(undef, length(norm_therm_vels))
 
     for (i, norm_therm_vel) = enumerate(norm_therm_vels)
         try
             df = CSV.read("data/algo=$(algo)_bm=0.0_tm=$(norm_therm_vel)_ppc=$(ppc).csv", DataFrame)
-            growth_rate = compute_max_growth_rate(df; num_bins)
+            growth_rate = compute_max_growth_rate(df; num_bins, growth_cutoff)
 
             if growth_rate < 0
                 @warn "Negative growth rate" norm_therm_vel growth_rate
@@ -368,28 +262,37 @@ function compute_stationary_growth_rates(algo, ppc; norm_therm_vels = collect(ra
     return norm_therm_vels, growth_rates
 end
 
-function stationary_stab_plot(algo)
+function stationary_stab_plot(algo; growth_cutoff=-2)
     fig = Figure(size=(325, 300), fonts=(; regular="Times New Roman"), fontsize=14)
 
     ax1 = Axis(fig[1, 1], yscale=log10)
 
-    for ppc in [1000, 10000, 100000, 1000000]
-        norm_therm_vels, growth_rates = compute_stationary_growth_rates(algo, ppc)
+    ppcs = [1000, 10000, 100000, 1000000]
+    limits = [-2, -2, -3, -4]
+    # limits = [-2, -3, -4, -5]
+    # limits = [-1, -2, -3, -4]
+
+    for (ppc, limit) in zip(ppcs, limits)
+        norm_therm_vels, growth_rates = compute_stationary_growth_rates(algo, ppc; growth_cutoff=limit)
+        # growth_rates = [g == 0 ? 1e-9 : g for g in growth_rates]
         ppc_exp = round(Int, log10(ppc))
         lines!(ax1, norm_therm_vels, growth_rates, label=L"ppc=10^%$(ppc_exp)")
     end
 
-    norm_therm_vels, growth_rates = compute_stationary_growth_rates(algo, 10000000, norm_therm_vels=[0.11, 0.12, 0.13, 0.14, 0.15, 0.16, 0.17, 0.18, 0.19, 0.2], num_bins=1)
-    lines!(ax1, norm_therm_vels, growth_rates, label=L"ppc=10^7")
+    # norm_therm_vels, growth_rates = compute_stationary_growth_rates(algo, 10000000; norm_therm_vels=[0.11, 0.12, 0.13, 0.14, 0.15, 0.16, 0.17, 0.18, 0.19, 0.2], num_bins=1, growth_cutoff)
+    # lines!(ax1, norm_therm_vels, growth_rates, label=L"ppc=10^7")
 
     ax1.xlabel = L"\bar{v}_t"
     ax1.ylabel = L"\gamma / \omega_p"
+
+    ax1.limits = ((0.0, 0.3), (1e-3, 1e-1))
 
     axislegend(ax1)
 
     save("stationary_$(algo).pdf", fig)
 end
-# stationary_stab_plot("mcpic1")
 
-# df = CSV.read("data/algo=mcpic1_bm=0.0_tm=0.1_ppc=1000000.csv", DataFrame)
-# make_fit_plot(df, show_fits=true)
+growth_cutoff = -2
+make_combo_fit_plot(; growth_cutoff)
+make_combo_growth_heatmap(; growth_cutoff)
+stationary_stab_plot("mcpic1"; growth_cutoff)
