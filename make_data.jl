@@ -260,10 +260,10 @@ end
 function make_algo_data(sim_func, algo_name; norm_num_macros=10000, num_cells=16)
     mkpath("data")
 
-    norm_beam_vels = collect(range(0.0, 0.5, step=0.01))
-    norm_therm_vels = collect(range(0.0, 0.35, step=0.01))
-    for norm_therm_vel = norm_therm_vels, norm_beam_vel = norm_beam_vels
-        df = @time run_simulation(sim_func, norm_therm_vel, norm_beam_vel; norm_num_macros, norm_perturb_vel=0.0)
+    norm_beam_vels = collect(range(0.0, 0.45, step=0.01))
+    norm_therm_vels = collect(range(0.0, 0.25, step=0.01))
+    for norm_beam_vel = norm_beam_vels, norm_therm_vel = norm_therm_vels
+        df = @time run_simulation(sim_func, norm_therm_vel, norm_beam_vel; norm_num_macros, norm_perturb_vel=0.0, num_periods=100)
 
         CSV.write("data/algo=$(algo_name)_bm=$(norm_beam_vel)_tm=$(norm_therm_vel).csv", df)
     end
@@ -273,7 +273,7 @@ end
 # make_algo_data(ecpic2_sim_func, "ecpic2")
 # make_algo_data(ecpic2_new_sim_func, "ecpic2_new")
 # make_algo_data(ecpic2_five_sim_func, "ecpic2_five")
-make_algo_data(pics_sim_func, "pics")
+# make_algo_data(pics_sim_func, "pics")
 
 function make_stationary_algo_data(sim_func, algo_name; norm_num_macros=1000, num_cells=16)
     mkpath("data")
