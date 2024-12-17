@@ -145,14 +145,6 @@ function ParticleInCell.step!(step::PICSParticlePush)
     species = step.species
 
     for n in eachindex(species)
-        # Push the particle based on its current velocity
-        particle_position!(
-            species,
-            n,
-            particle_position(species, n) .+
-            (step.timestep / particle_mass(species, n)) .* particle_momentum(species, n),
-        )
-
         # Accelerate the particle according to E
         # Find which cell the particle is in, and create a CartesianIndices
         # object that extends +/- interpolation_width in all directions
@@ -183,6 +175,14 @@ function ParticleInCell.step!(step::PICSParticlePush)
                     step.phi2.values[I]),
             )
         end
+
+        # Push the particle based on its current velocity
+        particle_position!(
+            species,
+            n,
+            particle_position(species, n) .+
+            (step.timestep / particle_mass(species, n)) .* particle_momentum(species, n),
+        )
     end
 end
 
@@ -212,9 +212,16 @@ function pics_sim_func(grid, electrons, dt)
     push!(sim.steps, PICSFieldSolve(rho0, rho2, phi0, phi2))
     push!(sim.steps, CommunicateGuardCells(phi0))
     push!(sim.steps, CommunicateGuardCells(phi2))
+    # push!(sim.steps, PoissonSolveFFT(rho0, phi0))
+    # push!(sim.steps, CommunicateGuardCells(phi0))
+    # push!(sim.steps, ParticleInCell.ZeroField(phi2))
 
     push!(sim.steps, PICSParticlePush(electrons, phi0, phi2, dt))
     push!(sim.steps, CommunicateSpecies(electrons, grid))
+    # push!(sim.steps, FiniteDifferenceToEdges(phi0, Eedge))
+    # push!(sim.steps, CommunicateGuardCells(Eedge))
+    # push!(sim.steps, ElectrostaticParticlePush(electrons, Eedge, dt, 0))
+    # push!(sim.steps, CommunicateSpecies(electrons, grid))
 
     return sim, (; rho=rho0, phi=phi0, phi2, rho2, Eedge, Enode)
 end

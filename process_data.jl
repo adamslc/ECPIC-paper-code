@@ -50,14 +50,20 @@ end
 
 @. exp_model(x, p) = exp((p[1] * x) + p[2])
 
-function make_combo_fit_plot_axis(ax, df; num_bins=10, show_fits=true, growth_cutoff=-2)
+function make_combo_fit_plot_axis(ax, df; num_bins=10, show_fits=true, growth_cutoff=-2, change_in_energy=true)
     ax.xgridvisible = false
     ax.ygridvisible = false
     ax.ylabel = L"|\Delta E_\text{th}| / E_\text{th}(0)"
 
     ynorm = df[1, :thermal_energy]
 
-    lines!(ax, df[!, :norm_time] ./ (2pi), abs.(df[!, :thermal_energy] .- ynorm) ./ ynorm, color=:black, linewidth=2)
+    if change_in_energy
+        lines!(ax, df[!, :norm_time] ./ (2pi), abs.(df[!, :thermal_energy] .- ynorm) ./ ynorm, color=:black, linewidth=2)
+    else
+        lines!(ax, df[!, :norm_time] ./ (2pi), abs.(df[!, :thermal_energy]), color=:black, linewidth=2)
+    end
+
+    max_growth = 0.0
 
     if show_fits
         fits = compute_fits(df, num_bins; growth_cutoff)
@@ -71,6 +77,10 @@ function make_combo_fit_plot_axis(ax, df; num_bins=10, show_fits=true, growth_cu
                 continue
             end
 
+            if fit[1] > max_growth
+                max_growth = fit[1]
+            end
+
             xs = [df[si, :norm_time], df[ei, :norm_time]]
             ys = exp_model(xs, fit)
 
@@ -78,18 +88,18 @@ function make_combo_fit_plot_axis(ax, df; num_bins=10, show_fits=true, growth_cu
         end
     end
 
+    # ax.title = L"\gamma / \omega_p = %$(max_growth)"
     hlines!(ax, [10.0^growth_cutoff], color=:black, linestyle=:dash)
 end
 
-function make_fit_plot2(df; num_bins=10, show_fits=false)
+function make_fit_plot(df; num_bins=10, show_fits=false)
     fig = Figure(size=(325, 250), fonts=(; regular="Times New Roman"), fontsize=14)
 
     ax1 = Axis(fig[1, 1], yscale=log10)
-    df = CSV.read("data/algo=ecpic1_bm=0.05_tm=0.01.csv", DataFrame)
     make_combo_fit_plot_axis(ax1, df; show_fits)
 
     ax1.xlabel = L"t \omega_p / 2 \pi"
-    ax1.limits = ((0, 10), nothing)
+    # ax1.limits = ((0, 10), nothing)
     save("fit.pdf", fig)
 end
 
@@ -115,9 +125,6 @@ function make_combo_fit_plot(; num_bins=10, growth_cutoff=-2)
     save("combo_fit.pdf", fig)
 end
 
-df = CSV.read("data/algo=ecpic1_bm=0.05_tm=0.1.csv", DataFrame)
-# make_fit_plot2(df, show_fits=false)
-
 function compute_max_growth_rate(df; num_bins=10, growth_cutoff=-2)
     fits = compute_fits(df, num_bins; growth_cutoff)
     if num_bins == 1
@@ -127,7 +134,7 @@ function compute_max_growth_rate(df; num_bins=10, growth_cutoff=-2)
 end
 
 function compute_growth_rates(algo; growth_cutoff=-2)
-    norm_beam_vels = collect(range(0.0, 0.4, step=0.01))
+    norm_beam_vels = collect(range(0.0, 0.5, step=0.01))
     norm_therm_vels = collect(range(0.01, 0.35, step=0.01))
 
     growth_rates = Matrix{Float64}(undef, length(norm_therm_vels), length(norm_beam_vels))
@@ -157,6 +164,7 @@ function make_growth_axis(ax, algo; hidex=false, hidey=false, colorrange=(-3, 0)
     norm_beam_vels, norm_therm_vels, growth_rates = compute_growth_rates(algo; growth_cutoff)
 
     hm = heatmap!(ax, norm_beam_vels, norm_therm_vels, log10.(transpose(growth_rates)); colorrange, colormap=:inferno, lowclip=:black)
+    # hm = heatmap!(ax, norm_beam_vels, norm_therm_vels, log10.(transpose(growth_rates)); colorrange, colormap=:inferno, lowclip=:white)
 
     # ax.xlabel = L"v_b / \omega_p \Delta x"
     # ax.ylabel = L"v_t / \omega_p \Delta x"
@@ -164,8 +172,9 @@ function make_growth_axis(ax, algo; hidex=false, hidey=false, colorrange=(-3, 0)
     ax.ylabel = L"\bar{v}_t"
     ax.ylabelrotation = 0
 
-    ax.xticks = ([0.1, 0.2, 0.3, 0.4], [L"0.1", L"0.2", L"0.3", L"0.4"])
+    ax.xticks = ([0.1, 0.2, 0.3, 0.4, 0.5], [L"0.1", L"0.2", L"0.3", L"0.4", L"0.5"])
     ax.yticks = ([0.1, 0.2, 0.3], [L"0.1", L"0.2", L"0.3"])
+    ax.limits = ((0, 0.5), (0.01, 0.35))
 
     if hidex
         ax.xlabelvisible = false
@@ -212,7 +221,8 @@ end
 
 function make_combo_growth_heatmap(; growth_cutoff=-2)
     # 624 units corresponds to a width of 6.5 inches
-    fig = Figure(size=(624, 400))
+    # fig = Figure(size=(624, 400))
+    fig = Figure(size=(624, 340))
 
     ax1 = Axis(fig[1,1], aspect=DataAspect(), title="MC-PIC1")
     hm = make_growth_axis(ax1, "mcpic1", hidex=true, growth_cutoff=growth_cutoff)
@@ -245,7 +255,8 @@ function compute_stationary_growth_rates(algo, ppc; norm_therm_vels = collect(ra
 
     for (i, norm_therm_vel) = enumerate(norm_therm_vels)
         try
-            df = CSV.read("data/algo=$(algo)_bm=0.0_tm=$(norm_therm_vel)_ppc=$(ppc).csv", DataFrame)
+            # df = CSV.read("data/algo=$(algo)_bm=0.0_tm=$(norm_therm_vel)_ppc=$(ppc).csv", DataFrame)
+            df = CSV.read("data20241213/algo=$(algo)_bm=0.0_tm=$(norm_therm_vel)_ppc=$(ppc).csv", DataFrame)
             growth_rate = compute_max_growth_rate(df; num_bins, growth_cutoff)
 
             if growth_rate < 0
@@ -268,9 +279,7 @@ function stationary_stab_plot(algo; growth_cutoff=-2)
     ax1 = Axis(fig[1, 1], yscale=log10)
 
     ppcs = [1000, 10000, 100000, 1000000]
-    limits = [-2, -2, -3, -4]
-    # limits = [-2, -3, -4, -5]
-    # limits = [-1, -2, -3, -4]
+    limits = [-1, -2, -3, -4]
 
     for (ppc, limit) in zip(ppcs, limits)
         norm_therm_vels, growth_rates = compute_stationary_growth_rates(algo, ppc; growth_cutoff=limit)
@@ -278,9 +287,6 @@ function stationary_stab_plot(algo; growth_cutoff=-2)
         ppc_exp = round(Int, log10(ppc))
         lines!(ax1, norm_therm_vels, growth_rates, label=L"ppc=10^%$(ppc_exp)")
     end
-
-    # norm_therm_vels, growth_rates = compute_stationary_growth_rates(algo, 10000000; norm_therm_vels=[0.11, 0.12, 0.13, 0.14, 0.15, 0.16, 0.17, 0.18, 0.19, 0.2], num_bins=1, growth_cutoff)
-    # lines!(ax1, norm_therm_vels, growth_rates, label=L"ppc=10^7")
 
     ax1.xlabel = L"\bar{v}_t"
     ax1.ylabel = L"\gamma / \omega_p"
@@ -296,3 +302,7 @@ growth_cutoff = -2
 make_combo_fit_plot(; growth_cutoff)
 make_combo_growth_heatmap(; growth_cutoff)
 stationary_stab_plot("mcpic1"; growth_cutoff)
+
+# df = CSV.read("data/algo=pics_bm=0.4_tm=0.3.csv", DataFrame)
+# df = CSV.read("data/algo=pics_bm=0.4_tm=0.01.csv", DataFrame)
+# make_fit_plot(df, show_fits=true)
