@@ -55,8 +55,6 @@ function run_simulation(sim_func, norm_therm_vel, norm_beam_vel; num_cells=16, n
     num_dumps = round(Int64, 2 * pi * num_periods / norm_dt / dump_period)
     num_steps = num_dumps * dump_period
 
-    @info "Running simulation with parameters:" sim_func init_strat norm_beam_vel norm_therm_vel norm_perturb_vel norm_wavenumber num_cells norm_num_macros norm_dt num_periods num_dumps num_steps myid()
-
     dist = Normal(beam_velocity, thermal_velocity)
 
     positions = Vector{Float64}(undef, num_macros)
@@ -102,15 +100,16 @@ function run_simulation(sim_func, norm_therm_vel, norm_beam_vel; num_cells=16, n
     field_energy = Vector{Float64}(undef, num_dumps)
     mode_amp = Vector{Float64}(undef, num_dumps)
 
+    start_time = time()
+
+    @info "Running simulation with parameters:" sim_func init_strat norm_beam_vel norm_therm_vel norm_perturb_vel norm_wavenumber num_cells norm_num_macros norm_dt num_periods num_dumps num_steps myid()
+
     # Run simulation
     sim_time = 0.0
     # @showprogress for n = 1:num_steps
     for n = 1:num_steps
         step!(sim)
         sim_time += dt
-
-        # @show rho.values phi.values
-        # n > 3 && return
 
         if n % dump_period == 0
             dump_number = div(n, dump_period)
@@ -133,12 +132,10 @@ function run_simulation(sim_func, norm_therm_vel, norm_beam_vel; num_cells=16, n
 
             amps = real.(fft(phi[eachindex(phi)]))
             mode_amp[dump_number] = amps[1 + norm_wavenumber]
-
-            if n % (1000 * dump_period) == 0
-                @info "Dumping at step $n of pid $(myid())"
-            end
         end
     end
+
+    @info "Finished running with parameters:" sim_func init_strat norm_beam_vel norm_therm_vel norm_perturb_vel norm_wavenumber num_cells norm_num_macros norm_dt num_periods num_dumps num_steps myid() elapsed_time=time()-start_time
 
     df = DataFrame(
         "norm_time" => dump_times,

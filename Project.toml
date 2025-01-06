@@ -10,6 +10,7 @@ LsqFit = "2fda8390-95c7-5789-9bda-21331edee243"
 Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
 ParticleInCell = "3f496205-d90f-4778-83b9-652c261f54b9"
 ProgressMeter = "92933f4c-e287-5a05-a399-4b506db050ca"
+SlurmClusterManager = "c82cd089-7bf7-41d7-976b-6b5d413cbe0a"
 UnicodePlots = "b8865327-cd53-5732-bb35-84acbb429228"
 
 [compat]

@@ -1,5 +1,8 @@
 using Distributed
 
+using SlurmClusterManager
+addprocs(SlurmManager())
+
 @everywhere include("make_data.jl")
 
 function make_algo_data(sim_func, algo_name; norm_num_macros=2^16, num_cells=16, init_strat="quiet")
