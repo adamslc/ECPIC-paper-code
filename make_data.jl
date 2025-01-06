@@ -5,6 +5,7 @@ using CSV
 using FFTW
 using ProgressMeter
 using Distributions
+using Distributed
 
 include("pics.jl")
 
@@ -49,7 +50,12 @@ function run_simulation(sim_func, norm_therm_vel, norm_beam_vel; num_cells=16, n
     thermal_velocity = norm_therm_vel * plasma_freq * dx
     beam_velocity = norm_beam_vel * plasma_freq * dx
 
-    @info "Running simulation with parameters:" sim_func init_strat norm_beam_vel norm_therm_vel norm_perturb_vel norm_wavenumber num_cells norm_num_macros norm_dt num_periods
+    # Make vector to store electric field energy
+    dump_period = 1
+    num_dumps = round(Int64, 2 * pi * num_periods / norm_dt / dump_period)
+    num_steps = num_dumps * dump_period
+
+    @info "Running simulation with parameters:" sim_func init_strat norm_beam_vel norm_therm_vel norm_perturb_vel norm_wavenumber num_cells norm_num_macros norm_dt num_periods num_dumps num_steps myid()
 
     dist = Normal(beam_velocity, thermal_velocity)
 
@@ -89,11 +95,6 @@ function run_simulation(sim_func, norm_therm_vel, norm_beam_vel; num_cells=16, n
     Eedge = fields[:Eedge]
     rho = fields[:rho]
 
-    # Make vector to store electric field energy
-    dump_period = 10
-    num_dumps = round(Int64, 2 * pi * num_periods / norm_dt / dump_period)
-    num_steps = num_dumps * dump_period
-    @show num_dumps num_steps
 
     dump_times = Vector{Float64}(undef, num_dumps)
     beam_momentum = Vector{Float64}(undef, num_dumps)
@@ -103,7 +104,8 @@ function run_simulation(sim_func, norm_therm_vel, norm_beam_vel; num_cells=16, n
 
     # Run simulation
     sim_time = 0.0
-    @showprogress for n = 1:num_steps
+    # @showprogress for n = 1:num_steps
+    for n = 1:num_steps
         step!(sim)
         sim_time += dt
 
@@ -131,6 +133,10 @@ function run_simulation(sim_func, norm_therm_vel, norm_beam_vel; num_cells=16, n
 
             amps = real.(fft(phi[eachindex(phi)]))
             mode_amp[dump_number] = amps[1 + norm_wavenumber]
+
+            if n % (1000 * dump_period) == 0
+                @info "Dumping at step $n of pid $(myid())"
+            end
         end
     end
 
@@ -298,51 +304,3 @@ function ecpic2_five_sim_func(grid, electrons, dt)
     return sim, (; rho, phi, Eedge, Enode)
 end
 
-function make_algo_data(sim_func, algo_name; norm_num_macros=10000, num_cells=16, init_strat="quiet")
-    mkpath("data")
-
-    # norm_beam_vels = collect(range(0.0, 0.45, step=0.01))
-    # norm_therm_vels = collect(range(0.0, 0.25, step=0.01))
-
-    norm_beam_vels = collect(range(0.0, 0.45, step=0.01))
-    norm_therm_vels = collect(range(0.26, 0.35, step=0.01))
-
-    # for norm_beam_vel = reverse(norm_beam_vels), norm_therm_vel = reverse(norm_therm_vels)
-    for norm_beam_vel = norm_beam_vels, norm_therm_vel = norm_therm_vels
-        df = @time run_simulation(sim_func, norm_therm_vel, norm_beam_vel; norm_num_macros, norm_perturb_vel=0.0, num_periods=100, init_strat)
-
-        CSV.write("data/algo=$(algo_name)_bm=$(norm_beam_vel)_tm=$(norm_therm_vel).csv", df)
-    end
-end
-# make_algo_data(mcpic1_sim_func, "mcpic1")
-# make_algo_data(ecpic1_sim_func, "ecpic1")
-# make_algo_data(ecpic2_sim_func, "ecpic2")
-# make_algo_data(ecpic2_new_sim_func, "ecpic2_new")
-# make_algo_data(ecpic2_five_sim_func, "ecpic2_five")
-# make_algo_data(pics_sim_func, "pics")
-
-function make_stationary_algo_data(sim_func, algo_name; norm_num_macros=1000, num_cells=16, norm_dt=0.1, init_strat="quiet")
-    mkpath("data")
-
-    norm_therm_vels = collect(range(0.0, 0.3, step=0.01))
-    # norm_therm_vels = collect(range(0.16, 0.2, step=0.01))
-    # norm_therm_vels = [0.16, 0.17, 0.15]
-    for norm_therm_vel = norm_therm_vels
-        # df = @time run_simulation(sim_func, norm_therm_vel, 0.0; norm_num_macros, norm_perturb_vel=0.0, norm_dt=1.0, num_periods=50, num_cells=8)
-        df = @time run_simulation(sim_func, norm_therm_vel, 0.0; norm_num_macros, norm_perturb_vel=0.0, norm_dt, num_periods=100, num_cells, init_strat)
-
-        CSV.write("data/algo=$(algo_name)_bm=0.0_tm=$(norm_therm_vel)_ppc=$(norm_num_macros)_init_strat=$(init_strat).csv", df)
-    end
-end
-# make_stationary_algo_data(mcpic1_sim_func, "mcpic1", norm_num_macros=2^6)
-# make_stationary_algo_data(mcpic1_sim_func, "mcpic1", norm_num_macros=2^8)
-# make_stationary_algo_data(mcpic1_sim_func, "mcpic1", norm_num_macros=2^10)
-# make_stationary_algo_data(mcpic1_sim_func, "mcpic1", norm_num_macros=2^12)
-# make_stationary_algo_data(mcpic1_sim_func, "mcpic1", norm_num_macros=2^14)
-# make_stationary_algo_data(mcpic1_sim_func, "mcpic1", norm_num_macros=2^16)
-# make_stationary_algo_data(mcpic1_sim_func, "mcpic1", norm_num_macros=2^18, norm_dt=0.5)
-# make_stationary_algo_data(mcpic1_sim_func, "mcpic1", norm_num_macros=2^20, norm_dt=0.5, num_cells=8)
-
-# make_stationary_algo_data(mcpic1_sim_func, "mcpic1", norm_num_macros=2^16, init_strat="quiet")
-# make_stationary_algo_data(mcpic1_sim_func, "mcpic1", norm_num_macros=2^16, init_strat="noisy")
-make_stationary_algo_data(mcpic1_sim_func, "mcpic1", norm_num_macros=2^16, init_strat="beam")

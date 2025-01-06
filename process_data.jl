@@ -219,7 +219,7 @@ function make_growth_plot(algo; title=algo)
     save("$(algo).pdf", fig)
 end
 
-# make_growth_plot("mcpic1")
+make_growth_plot("mcpic1")
 # make_growth_plot("ecpic1")
 # make_growth_plot("ecpic2")
 # make_growth_plot("ecpic2_new"; title="ecpic2 w/ 5 pt field solve")
