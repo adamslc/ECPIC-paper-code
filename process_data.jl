@@ -84,7 +84,7 @@ function make_combo_fit_plot_axis(ax, df; num_bins=10, show_fits=true, growth_cu
             xs = [df[si, :norm_time], df[ei, :norm_time]]
             ys = exp_model(xs, fit)
 
-            scatterlines!(ax, xs ./ (2pi), ys, color=:red, linewidth=1)
+            scatterlines!(ax, xs ./ (2pi), ys, color=:red, linewidth=1, markersize=2)
         end
     end
 
@@ -92,18 +92,18 @@ function make_combo_fit_plot_axis(ax, df; num_bins=10, show_fits=true, growth_cu
     hlines!(ax, [10.0^growth_cutoff], color=:black, linestyle=:dash)
 end
 
-function make_fit_plot(df; num_bins=10, show_fits=false)
-    fig = Figure(size=(325, 250), fonts=(; regular="Times New Roman"), fontsize=14)
+function make_fit_plot(df; num_bins=100, show_fits=false, change_in_energy=true, range=(-4, 2), growth_cutoff=-2)
+    fig = Figure(size=(325, 220), fonts=(; regular="Times New Roman"), fontsize=14)
 
     ax1 = Axis(fig[1, 1], yscale=log10)
-    make_combo_fit_plot_axis(ax1, df; show_fits)
+    make_combo_fit_plot_axis(ax1, df; show_fits, num_bins, change_in_energy, growth_cutoff)
 
     ax1.xlabel = L"t \omega_p / 2 \pi"
-    # ax1.limits = ((0, 10), nothing)
+    ax1.limits = (nothing, (10.).^(range))
     save("fit.pdf", fig)
 end
 
-function make_combo_fit_plot(; num_bins=10, growth_cutoff=-2)
+function make_combo_fit_plot(; num_bins=100, growth_cutoff=-2)
     fig = Figure(size=(325, 250), fonts=(; regular="Times New Roman"), fontsize=14)
 
     @info "First"
@@ -112,7 +112,7 @@ function make_combo_fit_plot(; num_bins=10, growth_cutoff=-2)
     make_combo_fit_plot_axis(ax1, df; num_bins, growth_cutoff)
     ax1.xticklabelsvisible = false
     ax1.xticksvisible = false
-    ax1.limits = ((0, 10), (1e-6, 1e2))
+    ax1.limits = ((0, 100), (1e-6, 1e2))
 
     @info "Second"
     ax2 = Axis(fig[2, 1], yscale=log10)
@@ -120,7 +120,7 @@ function make_combo_fit_plot(; num_bins=10, growth_cutoff=-2)
     df = CSV.read("data/algo=ecpic1_bm=0.05_tm=0.1.csv", DataFrame)
     make_combo_fit_plot_axis(ax2, df; num_bins, growth_cutoff)
     ax2.xlabel = L"t \omega_p / 2 \pi"
-    ax2.limits = ((0, 10), (1e-6, 1e2))
+    ax2.limits = ((0, 100), (1e-6, 1e2))
 
     save("combo_fit.pdf", fig)
 end
@@ -130,11 +130,14 @@ function compute_max_growth_rate(df; num_bins=10, growth_cutoff=-2)
     if num_bins == 1
         return fits[1][1]
     end
-    return max(maximum(x -> x[1], fits[2:end]), 0)
+    return max(maximum(x -> x[1], fits[2:end]), 0) / 2
 end
 
-function compute_growth_rates(algo; growth_cutoff=-2)
-    norm_beam_vels = collect(range(0.0, 0.5, step=0.01))
+function compute_growth_rates(algo; growth_cutoff=-2, num_bins=100)
+    # norm_beam_vels = collect(range(0.0, 0.5, step=0.01))
+    # norm_therm_vels = collect(range(0.01, 0.35, step=0.01))
+    norm_beam_vels = collect(range(0.0, 0.45, step=0.01))
+    # norm_therm_vels = collect(range(0.01, 0.25, step=0.01))
     norm_therm_vels = collect(range(0.01, 0.35, step=0.01))
 
     growth_rates = Matrix{Float64}(undef, length(norm_therm_vels), length(norm_beam_vels))
@@ -142,7 +145,7 @@ function compute_growth_rates(algo; growth_cutoff=-2)
     for (i, norm_therm_vel) = enumerate(norm_therm_vels), (j, norm_beam_vel) = enumerate(norm_beam_vels)
         try
             df = read_data(algo, norm_beam_vel, norm_therm_vel)
-            growth_rate = compute_max_growth_rate(df; growth_cutoff)
+            growth_rate = compute_max_growth_rate(df; growth_cutoff, num_bins)
 
             if growth_rate < 0
                 @warn "Negative growth rate" norm_therm_vel norm_beam_vel growth_rate
@@ -150,8 +153,8 @@ function compute_growth_rates(algo; growth_cutoff=-2)
 
             growth_rates[i, j] = growth_rate
         catch err
-            @error "Error measuring growth rate" algo norm_therm_vel norm_beam_vel err
-            growth_rates[i, j] = 0
+            # @error "Error measuring growth rate" algo norm_therm_vel norm_beam_vel err
+            growth_rates[i, j] = +Inf
         end
     end
 
@@ -163,7 +166,7 @@ function make_growth_axis(ax, algo; hidex=false, hidey=false, colorrange=(-3, 0)
 
     norm_beam_vels, norm_therm_vels, growth_rates = compute_growth_rates(algo; growth_cutoff)
 
-    hm = heatmap!(ax, norm_beam_vels, norm_therm_vels, log10.(transpose(growth_rates)); colorrange, colormap=:inferno, lowclip=:black)
+    hm = heatmap!(ax, norm_beam_vels, norm_therm_vels, log10.(transpose(growth_rates)); colorrange, colormap=:inferno, lowclip=:black, highclip=:white)
     # hm = heatmap!(ax, norm_beam_vels, norm_therm_vels, log10.(transpose(growth_rates)); colorrange, colormap=:inferno, lowclip=:white)
 
     # ax.xlabel = L"v_b / \omega_p \Delta x"
@@ -173,8 +176,12 @@ function make_growth_axis(ax, algo; hidex=false, hidey=false, colorrange=(-3, 0)
     ax.ylabelrotation = 0
 
     ax.xticks = ([0.1, 0.2, 0.3, 0.4, 0.5], [L"0.1", L"0.2", L"0.3", L"0.4", L"0.5"])
-    ax.yticks = ([0.1, 0.2, 0.3], [L"0.1", L"0.2", L"0.3"])
-    ax.limits = ((0, 0.5), (0.01, 0.35))
+    ax.yticks = ([0.0, 0.1, 0.2, 0.3], [L"0.0", L"0.1", L"0.2", L"0.3"])
+    # ax.limits = ((0, 0.5), (0.01, 0.35))
+    ax.leftspinevisible = false
+    ax.rightspinevisible = false
+    ax.topspinevisible = false
+    ax.bottomspinevisible = false
 
     if hidex
         ax.xlabelvisible = false
@@ -193,7 +200,7 @@ function make_growth_axis(ax, algo; hidex=false, hidey=false, colorrange=(-3, 0)
         ax.xminortickcolor = :red
         ax.xminorticksvisible = true
         ax.xminorticksize = 7
-        ax.xminortickwidth = 3
+        ax.xminortickwidth = 1
     end
 
     return hm
@@ -222,7 +229,7 @@ end
 function make_combo_growth_heatmap(; growth_cutoff=-2)
     # 624 units corresponds to a width of 6.5 inches
     # fig = Figure(size=(624, 400))
-    fig = Figure(size=(624, 340))
+    fig = Figure(size=(640, 400))
 
     ax1 = Axis(fig[1,1], aspect=DataAspect(), title="MC-PIC1")
     hm = make_growth_axis(ax1, "mcpic1", hidex=true, growth_cutoff=growth_cutoff)
@@ -250,13 +257,14 @@ function make_combo_growth_heatmap(; growth_cutoff=-2)
     save("combo_growth_heatmap.pdf", fig)
 end
 
-function compute_stationary_growth_rates(algo, ppc; norm_therm_vels = collect(range(0.01, 0.3, step=0.01)), num_bins=10, growth_cutoff=-2)
+function compute_stationary_growth_rates(algo, ppc; norm_therm_vels = collect(range(0.01, 0.3, step=0.01)), num_bins=10, growth_cutoff=-2, init_strat="beam")
     growth_rates = Vector{Float64}(undef, length(norm_therm_vels))
 
     for (i, norm_therm_vel) = enumerate(norm_therm_vels)
         try
+            df = CSV.read("data/algo=$(algo)_bm=0.0_tm=$(norm_therm_vel)_ppc=$(ppc)_init_strat=$(init_strat).csv", DataFrame)
             # df = CSV.read("data/algo=$(algo)_bm=0.0_tm=$(norm_therm_vel)_ppc=$(ppc).csv", DataFrame)
-            df = CSV.read("data20241213/algo=$(algo)_bm=0.0_tm=$(norm_therm_vel)_ppc=$(ppc).csv", DataFrame)
+            # df = CSV.read("data20241213/algo=$(algo)_bm=0.0_tm=$(norm_therm_vel)_ppc=$(ppc).csv", DataFrame)
             growth_rate = compute_max_growth_rate(df; num_bins, growth_cutoff)
 
             if growth_rate < 0
@@ -278,14 +286,20 @@ function stationary_stab_plot(algo; growth_cutoff=-2)
 
     ax1 = Axis(fig[1, 1], yscale=log10)
 
-    ppcs = [1000, 10000, 100000, 1000000]
-    limits = [-1, -2, -3, -4]
+    # ppcs = [1000, 10000, 100000, 1000000]
+    # limits = [-1, -2, -3, -4]
+    # ppcs = [2^10, 2^12, 2^14, 2^16, 2^18, 2^20]
+    # limits = [-3, -3, -3, -3, -3, -6]
+    ppcs = [2^16]
+    limits = [-6]
 
     for (ppc, limit) in zip(ppcs, limits)
         norm_therm_vels, growth_rates = compute_stationary_growth_rates(algo, ppc; growth_cutoff=limit)
         # growth_rates = [g == 0 ? 1e-9 : g for g in growth_rates]
-        ppc_exp = round(Int, log10(ppc))
-        lines!(ax1, norm_therm_vels, growth_rates, label=L"ppc=10^%$(ppc_exp)")
+        # @info "Growth rates" ppc limit norm_therm_vels growth_rates
+        ppc_exp10 = round(log10(ppc), digits=1)
+        ppc_exp2 = round(Int, log2(ppc))
+        lines!(ax1, norm_therm_vels, growth_rates, label=L"\textrm{ppc}=2^{%$(ppc_exp2)} \approx 10^{%$(ppc_exp10)}")
     end
 
     ax1.xlabel = L"\bar{v}_t"
@@ -299,10 +313,12 @@ function stationary_stab_plot(algo; growth_cutoff=-2)
 end
 
 growth_cutoff = -2
-make_combo_fit_plot(; growth_cutoff)
-make_combo_growth_heatmap(; growth_cutoff)
-stationary_stab_plot("mcpic1"; growth_cutoff)
+# make_combo_fit_plot(; growth_cutoff)
+# make_combo_growth_heatmap(; growth_cutoff)
+# stationary_stab_plot("mcpic1"; growth_cutoff)
 
-# df = CSV.read("data/algo=pics_bm=0.4_tm=0.3.csv", DataFrame)
-# df = CSV.read("data/algo=pics_bm=0.4_tm=0.01.csv", DataFrame)
-# make_fit_plot(df, show_fits=true)
+# df = CSV.read("data/algo=ecpic1_bm=0.1_tm=0.05.csv", DataFrame)
+# df = CSV.read("data/algo=ecpic1_bm=0.1_tm=0.1.csv", DataFrame)
+# df = CSV.read("data/algo=mcpic1_bm=0.0_tm=0.07_ppc=$(2^20).csv", DataFrame)
+df = CSV.read("data/algo=mcpic1_bm=0.0_tm=0.02_ppc=$(2^16)_init_strat=quiet.csv", DataFrame)
+make_fit_plot(df, show_fits=true, growth_cutoff=-6, range=(-15,2))
