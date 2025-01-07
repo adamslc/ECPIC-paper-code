@@ -21,7 +21,7 @@ function make_algo_data(sim_func, algo_name; norm_num_macros=2^14, num_cells=16,
     norm_therm_vels = collect(range(0.0, 0.25, step=0.01))
 
     @sync @distributed for (norm_beam_vel, norm_therm_vel) = collect(Iterators.product(norm_beam_vels, norm_therm_vels))
-        df = run_simulation(sim_func, norm_therm_vel, norm_beam_vel; norm_num_macros, norm_perturb_vel=0.0, num_periods=10, init_strat)
+        df = run_simulation(sim_func, norm_therm_vel, norm_beam_vel; norm_num_macros, norm_perturb_vel=0.0, num_periods=100, init_strat)
 
         CSV.write("data/algo=$(algo_name)_bm=$(norm_beam_vel)_tm=$(norm_therm_vel).csv", df)
     end
@@ -41,7 +41,7 @@ function make_stationary_algo_data(sim_func, algo_name; norm_num_macros=1000, nu
     # norm_therm_vels = [0.16, 0.17, 0.15]
     for norm_therm_vel = norm_therm_vels
         # df = @time run_simulation(sim_func, norm_therm_vel, 0.0; norm_num_macros, norm_perturb_vel=0.0, norm_dt=1.0, num_periods=50, num_cells=8)
-        df = @time run_simulation(sim_func, norm_therm_vel, 0.0; norm_num_macros, norm_perturb_vel=0.0, norm_dt, num_periods=10, num_cells, init_strat)
+        df = @time run_simulation(sim_func, norm_therm_vel, 0.0; norm_num_macros, norm_perturb_vel=0.0, norm_dt, num_periods=100, num_cells, init_strat)
 
         CSV.write("data/algo=$(algo_name)_bm=0.0_tm=$(norm_therm_vel)_ppc=$(norm_num_macros)_init_strat=$(init_strat).csv", df)
     end
