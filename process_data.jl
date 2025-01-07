@@ -219,7 +219,7 @@ function make_growth_plot(algo; title=algo)
     save("$(algo).pdf", fig)
 end
 
-make_growth_plot("mcpic1")
+# make_growth_plot("mcpic1")
 # make_growth_plot("ecpic1")
 # make_growth_plot("ecpic2")
 # make_growth_plot("ecpic2_new"; title="ecpic2 w/ 5 pt field solve")
@@ -312,13 +312,13 @@ function stationary_stab_plot(algo; growth_cutoff=-2)
     save("stationary_$(algo).pdf", fig)
 end
 
-growth_cutoff = -2
+growth_cutoff = -3
 # make_combo_fit_plot(; growth_cutoff)
 # make_combo_growth_heatmap(; growth_cutoff)
 # stationary_stab_plot("mcpic1"; growth_cutoff)
 
 # df = CSV.read("data/algo=ecpic1_bm=0.1_tm=0.05.csv", DataFrame)
-# df = CSV.read("data/algo=ecpic1_bm=0.1_tm=0.1.csv", DataFrame)
+df = CSV.read("data/algo=ecpic1_bm=0.1_tm=0.1.csv", DataFrame)
 # df = CSV.read("data/algo=mcpic1_bm=0.0_tm=0.07_ppc=$(2^20).csv", DataFrame)
-df = CSV.read("data/algo=mcpic1_bm=0.0_tm=0.02_ppc=$(2^16)_init_strat=quiet.csv", DataFrame)
+# df = CSV.read("data/algo=mcpic1_bm=0.0_tm=0.02_ppc=$(2^16)_init_strat=quiet.csv", DataFrame)
 make_fit_plot(df, show_fits=true, growth_cutoff=-6, range=(-15,2))

@@ -51,7 +51,7 @@ function run_simulation(sim_func, norm_therm_vel, norm_beam_vel; num_cells=16, n
     beam_velocity = norm_beam_vel * plasma_freq * dx
 
     # Make vector to store electric field energy
-    dump_period = 1
+    dump_period = 10
     num_dumps = round(Int64, 2 * pi * num_periods / norm_dt / dump_period)
     num_steps = num_dumps * dump_period
 
