@@ -106,8 +106,8 @@ function run_simulation(sim_func, norm_therm_vel, norm_beam_vel; num_cells=16, n
 
     # Run simulation
     sim_time = 0.0
-    # @showprogress for n = 1:num_steps
-    for n = 1:num_steps
+    @showprogress for n = 1:num_steps
+    # for n = 1:num_steps
         step!(sim)
         sim_time += dt
 

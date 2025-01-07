@@ -3,6 +3,7 @@ using DataFrames
 using LsqFit
 using FFTW
 using CairoMakie
+using ColorSchemes
 
 function read_data(algo, bm, tm)
     CSV.read("data/algo=$(algo)_bm=$(bm)_tm=$(tm).csv", DataFrame)
@@ -50,14 +51,19 @@ end
 
 @. exp_model(x, p) = exp((p[1] * x) + p[2])
 
-function make_combo_fit_plot_axis(ax, df; num_bins=10, show_fits=true, growth_cutoff=-2, change_in_energy=true)
+function make_combo_fit_plot_axis(ax, df; num_bins=10, show_fits=true, growth_cutoff=-2, change_in_energy=true, show_negative=false)
     ax.xgridvisible = false
     ax.ygridvisible = false
     ax.ylabel = L"|\Delta E_\text{th}| / E_\text{th}(0)"
 
     ynorm = df[1, :thermal_energy]
 
-    if change_in_energy
+    if show_negative
+        norm_energy = (df[!, :thermal_energy] .- ynorm) ./ ynorm
+        color_val = sign.(norm_energy)
+        cs = ColorScheme([colorant"blue", colorant"black"])
+        lines!(ax, df[!, :norm_time] ./ (2pi), abs.(norm_energy), color=color_val, colormap=cs, linewidth=2)
+    elseif change_in_energy
         lines!(ax, df[!, :norm_time] ./ (2pi), abs.(df[!, :thermal_energy] .- ynorm) ./ ynorm, color=:black, linewidth=2)
     else
         lines!(ax, df[!, :norm_time] ./ (2pi), abs.(df[!, :thermal_energy]), color=:black, linewidth=2)
@@ -92,11 +98,11 @@ function make_combo_fit_plot_axis(ax, df; num_bins=10, show_fits=true, growth_cu
     hlines!(ax, [10.0^growth_cutoff], color=:black, linestyle=:dash)
 end
 
-function make_fit_plot(df; num_bins=100, show_fits=false, change_in_energy=true, range=(-4, 2), growth_cutoff=-2)
+function make_fit_plot(df; num_bins=100, show_fits=false, change_in_energy=true, range=(-4, 2), growth_cutoff=-2, show_negative=false)
     fig = Figure(size=(325, 220), fonts=(; regular="Times New Roman"), fontsize=14)
 
     ax1 = Axis(fig[1, 1], yscale=log10)
-    make_combo_fit_plot_axis(ax1, df; show_fits, num_bins, change_in_energy, growth_cutoff)
+    make_combo_fit_plot_axis(ax1, df; show_fits, num_bins, change_in_energy, growth_cutoff, show_negative)
 
     ax1.xlabel = L"t \omega_p / 2 \pi"
     ax1.limits = (nothing, (10.).^(range))
