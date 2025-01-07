@@ -3,7 +3,12 @@
 @info "Adding worker processes"
 using Distributed
 using SlurmClusterManager
-addprocs(SlurmManager())
+
+if "SLURM_JOB_ID" in keys(ENV)
+    addprocs(SlurmManager())
+else
+    addprocs(8)
+end
 
 @info "Activating project on worker processes"
 @everywhere begin
@@ -14,7 +19,7 @@ end
 @info "Loading simulation code on worker processes"
 @everywhere include("make_data.jl")
 
-function make_algo_data(sim_func, algo_name; norm_num_macros=2^14, num_cells=16, init_strat="quiet")
+function make_algo_data(sim_func, algo_name; norm_num_macros=2^10, num_cells=16, init_strat="beam")
     mkpath("data")
 
     norm_beam_vels = collect(range(0.0, 0.45, step=0.01))
