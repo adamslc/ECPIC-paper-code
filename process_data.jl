@@ -13,6 +13,10 @@ end
 function compute_fit(xs, ys; growth_cutoff=-3)
     @. model(x, p) = (p[1] * x) + p[2]
 
+    if any(ys .< 0)
+        return [0.0, 0.0]
+    end
+
     log_ys = Vector{Float64}()
     new_xs = Vector{Float64}()
     for i in eachindex(ys)
@@ -90,7 +94,7 @@ function make_combo_fit_plot_axis(ax, df; num_bins=10, show_fits=true, growth_cu
             xs = [df[si, :norm_time], df[ei, :norm_time]]
             ys = exp_model(xs, fit)
 
-            scatterlines!(ax, xs ./ (2pi), ys, color=:red, linewidth=1, markersize=2)
+            scatterlines!(ax, xs ./ (2pi), ys, color=:red, linewidth=0.5, markersize=2)
         end
     end
 
@@ -143,8 +147,7 @@ function compute_growth_rates(algo; growth_cutoff=-2, num_bins=100)
     # norm_beam_vels = collect(range(0.0, 0.5, step=0.01))
     # norm_therm_vels = collect(range(0.01, 0.35, step=0.01))
     norm_beam_vels = collect(range(0.0, 0.45, step=0.01))
-    # norm_therm_vels = collect(range(0.01, 0.25, step=0.01))
-    norm_therm_vels = collect(range(0.01, 0.35, step=0.01))
+    norm_therm_vels = collect(range(0.01, 0.25, step=0.01))
 
     growth_rates = Matrix{Float64}(undef, length(norm_therm_vels), length(norm_beam_vels))
 
@@ -318,13 +321,14 @@ function stationary_stab_plot(algo; growth_cutoff=-2)
     save("stationary_$(algo).pdf", fig)
 end
 
-growth_cutoff = -4
-make_combo_fit_plot(; growth_cutoff)
-make_combo_growth_heatmap(; growth_cutoff)
+growth_cutoff = -2
+# make_combo_fit_plot(; growth_cutoff)
+# make_combo_growth_heatmap(; growth_cutoff)
 # stationary_stab_plot("mcpic1"; growth_cutoff)
 
 # df = CSV.read("data/algo=ecpic1_bm=0.1_tm=0.05.csv", DataFrame)
-# df = CSV.read("data/algo=ecpic1_bm=0.1_tm=0.1.csv", DataFrame)
+# df = CSV.read("data/algo=ecpic1_bm=0.1_tm=0.2.csv", DataFrame)
+# df = CSV.read("data/algo=mcpic1_bm=0.0_tm=0.01.csv", DataFrame)
 # df = CSV.read("data/algo=mcpic1_bm=0.0_tm=0.07_ppc=$(2^20).csv", DataFrame)
 # df = CSV.read("data/algo=mcpic1_bm=0.0_tm=0.02_ppc=$(2^16)_init_strat=quiet.csv", DataFrame)
-# make_fit_plot(df, show_fits=true, growth_cutoff=-6, range=(-15,2))
+# make_fit_plot(df, show_fits=true, growth_cutoff=-10, range=(-15,2), show_negative=true)

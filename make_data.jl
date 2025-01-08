@@ -28,7 +28,7 @@ function bit_reverse_permutation!(arr::Vector)
     permute!(arr, reversed_indices)
 end
 
-function run_simulation(sim_func, norm_therm_vel, norm_beam_vel; num_cells=16, norm_dt=0.1, norm_num_macros=10, num_periods=10, norm_perturb_vel=0.00001, norm_wavenumber=1, init_strat="quiet")
+function run_simulation(sim_func, norm_therm_vel, norm_beam_vel; num_cells=16, norm_dt=0.1, norm_num_macros=10, num_periods=10, norm_perturb_vel=0.00001, norm_wavenumber=1, init_strat="quiet", perturb_all_wavenumbers=false, dump_period=10, show_progressbar=false)
     # Create grid
     sim_length = 1.0
     grid = UniformCartesianGrid((0.0,), (sim_length,), (num_cells,), (true,))
@@ -51,7 +51,6 @@ function run_simulation(sim_func, norm_therm_vel, norm_beam_vel; num_cells=16, n
     beam_velocity = norm_beam_vel * plasma_freq * dx
 
     # Make vector to store electric field energy
-    dump_period = 10
     num_dumps = round(Int64, 2 * pi * num_periods / norm_dt / dump_period)
     num_steps = num_dumps * dump_period
 
@@ -80,9 +79,17 @@ function run_simulation(sim_func, norm_therm_vel, norm_beam_vel; num_cells=16, n
         throw(ArgumentError("Invalid init_strat"))
     end
 
-    # Add velocity perturbation at wavenumber with a random phase
-    phase = 2pi * rand()
-    momentums .+= (particles_per_macro * elec_mass * perturb_velocity) .* cos.(wavenumber .* positions .+ phase)
+    if perturb_all_wavenumbers
+        for k in 1:div(num_cells, 2)
+            wavenumber = k * 2 * pi / sim_length
+            phase = 2pi * rand()
+            momentums .+= (particles_per_macro * elec_mass * perturb_velocity) .* cos.(wavenumber .* positions .+ phase)
+        end
+    else
+        # Add velocity perturbation at wavenumber with a random phase
+        phase = 2pi * rand()
+        momentums .+= (particles_per_macro * elec_mass * perturb_velocity) .* cos.(wavenumber .* positions .+ phase)
+    end
 
     electrons = ParticleInCell.electrons(positions, momentums, particles_per_macro)
 
@@ -106,9 +113,8 @@ function run_simulation(sim_func, norm_therm_vel, norm_beam_vel; num_cells=16, n
 
     # Run simulation
     sim_time = 0.0
-    # @showprogress for n = 1:num_steps
+    p = Progress(num_steps, enabled=show_progressbar)
     for n = 1:num_steps
-    # for n = 1:num_steps
         step!(sim)
         sim_time += dt
 
@@ -134,6 +140,8 @@ function run_simulation(sim_func, norm_therm_vel, norm_beam_vel; num_cells=16, n
             amps = real.(fft(phi[eachindex(phi)]))
             mode_amp[dump_number] = amps[1 + norm_wavenumber]
         end
+
+        next!(p)
     end
 
     @info "Finished running with parameters:" sim_func init_strat norm_beam_vel norm_therm_vel norm_perturb_vel norm_wavenumber num_cells norm_num_macros norm_dt num_periods num_dumps num_steps myid() elapsed_time=time()-start_time
