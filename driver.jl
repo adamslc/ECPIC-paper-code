@@ -19,7 +19,7 @@ end
 @info "Loading simulation code on worker processes"
 @everywhere include("make_data.jl")
 
-function make_algo_data(sim_func, algo_name; norm_num_macros=2^14, num_cells=16, init_strat="beam")
+function make_algo_data(sim_func, algo_name; norm_num_macros=2^16, num_cells=16, init_strat="beam")
     mkpath("data")
 
     norm_beam_vels = collect(range(0.0, 0.45, step=0.01))

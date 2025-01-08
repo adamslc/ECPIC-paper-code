@@ -13,7 +13,7 @@ end
 function compute_fit(xs, ys; growth_cutoff=-3)
     @. model(x, p) = (p[1] * x) + p[2]
 
-    if any(ys .< 0)
+    if any(ys .< 10.0^growth_cutoff)
         return [0.0, 0.0]
     end
 
@@ -28,11 +28,6 @@ function compute_fit(xs, ys; growth_cutoff=-3)
     end
 
     fit = curve_fit(model, new_xs, log_ys, [1e-12, log_ys[1]])
-
-    if log10(abs(ys[1])) < growth_cutoff
-        # @info "Growth rate too small" coef(fit) log10(ys[end]) log_ys[end]
-        return [0.0, 0.0]
-    end
 
     return coef(fit)
 end
@@ -321,14 +316,19 @@ function stationary_stab_plot(algo; growth_cutoff=-2)
     save("stationary_$(algo).pdf", fig)
 end
 
-growth_cutoff = -2
+growth_cutoff = -5
 # make_combo_fit_plot(; growth_cutoff)
 # make_combo_growth_heatmap(; growth_cutoff)
 # stationary_stab_plot("mcpic1"; growth_cutoff)
 
 # df = CSV.read("data/algo=ecpic1_bm=0.1_tm=0.05.csv", DataFrame)
 # df = CSV.read("data/algo=ecpic1_bm=0.1_tm=0.2.csv", DataFrame)
-# df = CSV.read("data/algo=mcpic1_bm=0.0_tm=0.01.csv", DataFrame)
+# df = CSV.read("data/algo=ecpic1_bm=0.3_tm=0.22.csv", DataFrame)
 # df = CSV.read("data/algo=mcpic1_bm=0.0_tm=0.07_ppc=$(2^20).csv", DataFrame)
 # df = CSV.read("data/algo=mcpic1_bm=0.0_tm=0.02_ppc=$(2^16)_init_strat=quiet.csv", DataFrame)
-# make_fit_plot(df, show_fits=true, growth_cutoff=-10, range=(-15,2), show_negative=true)
+
+# df = CSV.read("data/algo=mcpic1_bm=0.0_tm=0.14.csv", DataFrame)
+# df = CSV.read("data/algo=ecpic1_bm=0.3_tm=0.22.csv", DataFrame)
+df = CSV.read("data/algo=ecpic1_bm=0.3_tm=0.22.csv", DataFrame)
+make_fit_plot(df, show_fits=true, growth_cutoff=-5, range=(-15,2), show_negative=true)
+
