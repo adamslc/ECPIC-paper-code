@@ -3,6 +3,7 @@ using DataFrames
 using LsqFit
 using FFTW
 using CairoMakie
+using Colors
 using ColorSchemes
 
 function read_data(algo, bm, tm)
@@ -35,12 +36,12 @@ end
 function compute_fits(df, num_bins=20; growth_cutoff=-3)
     fits = Vector{Vector{Float64}}(undef, num_bins)
 
-    if any((df[:, :thermal_energy] .- df[1, :thermal_energy]) ./ df[1, :thermal_energy] .< -1 * 10.0^growth_cutoff)
-        for i in 1:num_bins
-            fits[i] = [0.0, 0.0]
-        end
-        return fits
-    end
+    # if any((df[:, :thermal_energy] .- df[1, :thermal_energy]) ./ df[1, :thermal_energy] .< -1 * 10.0^growth_cutoff)
+    #     for i in 1:num_bins
+    #         fits[i] = [0.0, 0.0]
+    #     end
+    #     return fits
+    # end
 
     for i in 1:num_bins
         si = round(Int, (i - 1)*length(df[!, :norm_time]) / num_bins) + 1
@@ -57,7 +58,7 @@ end
 
 @. exp_model(x, p) = exp((p[1] * x) + p[2])
 
-function make_combo_fit_plot_axis(ax, df; num_bins=10, show_fits=true, growth_cutoff=-2, change_in_energy=true, show_negative=false)
+function make_combo_fit_plot_axis(ax, df; num_bins=10, show_fits=true, growth_cutoff=-2, change_in_energy=true, show_negative=false, lower_ppc=nothing)
     ax.xgridvisible = false
     ax.ygridvisible = false
     ax.ylabel = L"|\Delta E_\text{th}| / E_\text{th}(0)"
@@ -69,6 +70,14 @@ function make_combo_fit_plot_axis(ax, df; num_bins=10, show_fits=true, growth_cu
         color_val = sign.(norm_energy)
         cs = ColorScheme([colorant"blue", colorant"black"])
         lines!(ax, df[!, :norm_time] ./ (2pi), abs.(norm_energy), color=color_val, colormap=cs, linewidth=2)
+
+        if lower_ppc !== nothing
+            ynorm2 = lower_ppc[1, :thermal_energy]
+            norm_energy2 = (lower_ppc[!, :thermal_energy] .- ynorm2) ./ ynorm2
+            color_val2 = sign.(norm_energy2)
+            cs2 = ColorScheme([alphacolor(colorant"blue", 0.5), alphacolor(colorant"black", 0.5)])
+            lines!(ax, lower_ppc[!, :norm_time] ./ (2pi), abs.(norm_energy2), color=color_val2, colormap=cs2, linewidth=2)
+        end
     elseif change_in_energy
         lines!(ax, df[!, :norm_time] ./ (2pi), abs.(df[!, :thermal_energy] .- ynorm) ./ ynorm, color=:black, linewidth=2)
     else
@@ -104,15 +113,15 @@ function make_combo_fit_plot_axis(ax, df; num_bins=10, show_fits=true, growth_cu
     hlines!(ax, [10.0^growth_cutoff], color=:black, linestyle=:dash)
 end
 
-function make_fit_plot(df; num_bins=100, show_fits=false, change_in_energy=true, range=(-4, 2), growth_cutoff=-2, show_negative=false)
+function make_fit_plot(df; num_bins=100, show_fits=false, change_in_energy=true, range=(-4, 2), growth_cutoff=-2, show_negative=false, filename="fit.pdf", lower_ppc=nothing)
     fig = Figure(size=(325, 220), fonts=(; regular="Times New Roman"), fontsize=14)
 
     ax1 = Axis(fig[1, 1], yscale=log10)
-    make_combo_fit_plot_axis(ax1, df; show_fits, num_bins, change_in_energy, growth_cutoff, show_negative)
+    make_combo_fit_plot_axis(ax1, df; show_fits, num_bins, change_in_energy, growth_cutoff, show_negative, lower_ppc)
 
     ax1.xlabel = L"t \omega_p / 2 \pi"
     ax1.limits = (nothing, (10.).^(range))
-    save("fit.pdf", fig)
+    save(filename, fig)
 end
 
 function make_combo_fit_plot(; num_bins=100, growth_cutoff=-2)
@@ -203,7 +212,7 @@ function make_growth_axis(ax, algo; hidex=false, hidey=false, colorrange=(-3, 0)
     if hidey
         ax.ylabelvisible = false
         ax.yticklabelsvisible = false
-        ax.yticksvisible = false
+        # ax.yticksvisible = false
     end
 
     if !isnothing(v_critical)
@@ -217,12 +226,12 @@ function make_growth_axis(ax, algo; hidex=false, hidey=false, colorrange=(-3, 0)
     return hm
 end
 
-function make_growth_plot(algo; title=algo)
+function make_growth_plot(algo; title=algo, growth_cutoff=-2)
 
     fig = Figure()
 
     ax1 = Axis(fig[1,1], aspect=DataAspect(), title=title)
-    hm = make_growth_axis(ax1, algo)
+    hm = make_growth_axis(ax1, algo, growth_cutoff=growth_cutoff)
 
     cbar = Colorbar(fig[:, 2], hm, label=L"\text{(Growth rate)} / \omega_p")
     cbar.ticks = ([-3, -2, -1, 0], [L"10^{-3}", L"10^{-2}", L"10^{-1}", L"10^{0}"])
@@ -230,34 +239,40 @@ function make_growth_plot(algo; title=algo)
     save("$(algo).pdf", fig)
 end
 
-# make_growth_plot("mcpic1")
-# make_growth_plot("ecpic1")
-# make_growth_plot("ecpic2")
-# make_growth_plot("ecpic2_new"; title="ecpic2 w/ 5 pt field solve")
-# make_growth_plot("ecpic2_five"; title="ecpic2 w/ 4th order solve")
-# make_growth_plot("pics")
+# make_growth_plot("mcpic1", growth_cutoff=-12)
+# make_growth_plot("ecpic1", growth_cutoff=-5)
+# make_growth_plot("ecpic2", growth_cutoff=-10)
+# make_growth_plot("ecpic2_new"; title="ecpic2 w/ 5 pt field solve", growth_cutoff=-8)
+# make_growth_plot("ecpic2_five"; title="ecpic2 w/ 4th order solve", growth_cutoff=-10)
+# make_growth_plot("pics", growth_cutoff=-5)
 
 function make_combo_growth_heatmap(; growth_cutoff=-2, num_bins=20)
     # 624 units corresponds to a width of 6.5 inches
     # fig = Figure(size=(624, 400))
     fig = Figure(size=(640, 400))
 
-    ax1 = Axis(fig[1,1], aspect=DataAspect(), title="MC-PIC1")
+    growth_cutoff = -12
+    ax1 = Axis(fig[1,1], aspect=DataAspect(), title="MC-PIC1 ($growth_cutoff)")
     hm = make_growth_axis(ax1, "mcpic1", hidex=true, growth_cutoff=growth_cutoff, num_bins=num_bins)
 
-    ax2 = Axis(fig[1,2], aspect=DataAspect(), title="EC-PIC1")
+    growth_cutoff = -5
+    ax2 = Axis(fig[1,2], aspect=DataAspect(), title="EC-PIC1 ($growth_cutoff)")
     make_growth_axis(ax2, "ecpic1", hidex=true, hidey=true, v_critical=0.288, growth_cutoff=growth_cutoff, num_bins=num_bins)
 
-    ax3 = Axis(fig[1,3], aspect=DataAspect(), title="EC-PIC2-Standard")
+    growth_cutoff = -10
+    ax3 = Axis(fig[1,3], aspect=DataAspect(), title="EC-PIC2-Standard ($growth_cutoff)")
     make_growth_axis(ax3, "ecpic2", hidex=true, hidey=true, v_critical=0.183, growth_cutoff=growth_cutoff, num_bins=num_bins)
 
-    ax4 = Axis(fig[2,1], aspect=DataAspect(), title="EC-PIC2-Fourth")
+    growth_cutoff = -10
+    ax4 = Axis(fig[2,1], aspect=DataAspect(), title="EC-PIC2-Fourth ($growth_cutoff)")
     hm = make_growth_axis(ax4, "ecpic2_five"; v_critical=0.158, growth_cutoff=growth_cutoff, num_bins=num_bins)
 
-    ax5 = Axis(fig[2,2], aspect=DataAspect(), title="EC-PIC2-Lagrange")
+    growth_cutoff = -8
+    ax5 = Axis(fig[2,2], aspect=DataAspect(), title="EC-PIC2-Lagrange ($growth_cutoff)")
     make_growth_axis(ax5, "ecpic2_new", hidey=true, v_critical=0.316, growth_cutoff=growth_cutoff, num_bins=num_bins)
 
-    ax6 = Axis(fig[2,3], aspect=DataAspect(), title="CS-PIC")
+    growth_cutoff = -5
+    ax6 = Axis(fig[2,3], aspect=DataAspect(), title="CS-PIC ($growth_cutoff)")
     make_growth_axis(ax6, "pics", hidey=true, growth_cutoff=growth_cutoff, num_bins=num_bins)
 
     cbar = Colorbar(fig[:, 4], hm, label=L"\text{(Growth rate)} / \omega_p")
@@ -323,9 +338,9 @@ function stationary_stab_plot(algo; growth_cutoff=-2)
     save("stationary_$(algo).pdf", fig)
 end
 
-growth_cutoff = -12
+growth_cutoff = -10
 # make_combo_fit_plot(; growth_cutoff)
-make_combo_growth_heatmap(; growth_cutoff, num_bins=20)
+# make_combo_growth_heatmap(; growth_cutoff, num_bins=100)
 # stationary_stab_plot("mcpic1"; growth_cutoff)
 
 # df = CSV.read("data/algo=ecpic1_bm=0.1_tm=0.05.csv", DataFrame)
@@ -337,7 +352,12 @@ make_combo_growth_heatmap(; growth_cutoff, num_bins=20)
 # df = CSV.read("data/algo=ecpic1_bm=0.3_tm=0.22.csv", DataFrame)
 # df = CSV.read("data/algo=ecpic1_bm=0.3_tm=0.22.csv", DataFrame)
 
-# df = CSV.read("data/algo=mcpic1_bm=0.1_tm=0.12.csv", DataFrame)
-df = CSV.read("data/algo=ecpic1_bm=0.22_tm=0.2.csv", DataFrame)
-make_fit_plot(df, show_fits=true, growth_cutoff=growth_cutoff, range=(-15,2), show_negative=true, num_bins=20)
+# df = CSV.read("data/algo=ecpic1_bm=0.2_tm=0.07.csv", DataFrame)
+
+# df = CSV.read("data/algo=mcpic1_bm=0.2_tm=0.08.csv", DataFrame)
+# df2 = CSV.read("data/algo=mcpic1_ppc=$(2^14)_bm=0.2_tm=0.07.csv", DataFrame)
+
+df = CSV.read("data/algo=ecpic1_bm=0.2_tm=0.22.csv", DataFrame)
+df2 = CSV.read("data/algo=ecpic1_ppc=$(2^14)_bm=0.2_tm=0.22.csv", DataFrame)
+make_fit_plot(df, show_fits=true, growth_cutoff=-5, range=(-15,2), show_negative=true, num_bins=20, lower_ppc=df2)
 
