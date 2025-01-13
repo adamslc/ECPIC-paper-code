@@ -11,17 +11,30 @@ function read_data(algo, bm, tm)
     # CSV.read("data20240419/algo=$(algo)_bm=$(bm)_tm=$(tm).csv", DataFrame)
 end
 
-function compute_fit(xs, ys; growth_cutoff=-3)
-    @. model(x, p) = (p[1] * x) + p[2]
+function compute_fit2(df; timespan=10, growth_cutoff=-2)
+    ynorm = df[1, :thermal_energy]
+    norm_energy = (df[!, :thermal_energy] .- ynorm) ./ ynorm
 
-    if any(ys .< 10.0^growth_cutoff)
-        return [0.0, 0.0]
+    imax = findfirst(x -> x > 10.0^growth_cutoff, norm_energy)
+    if imax === nothing
+        imax = length(norm_energy)
     end
+
+    tmin = df[imax, :norm_time] - 2*pi*timespan
+    imin = findfirst(x -> x > tmin, df[!, :norm_time])
+    if imin === nothing
+        imin = 1
+    end
+
+    xs = df[imin:imax, :norm_time]
+    ys = norm_energy[imin:imax]
+
+    @. model(x, p) = (p[1] * x) + p[2]
 
     log_ys = Vector{Float64}()
     new_xs = Vector{Float64}()
     for i in eachindex(ys)
-        log_y = log(abs(ys[i]))
+        log_y = sign(ys[i]) * log(abs(ys[i]))
         if !(isnan(log_y) || isinf(log_y))
             push!(new_xs, xs[i])
             push!(log_ys, log_y)
@@ -29,6 +42,33 @@ function compute_fit(xs, ys; growth_cutoff=-3)
     end
 
     fit = curve_fit(model, new_xs, log_ys, [1e-12, log_ys[1]])
+
+    return fit
+end
+
+function compute_fit(xs, ys; growth_cutoff=-3)
+    @. model(x, p) = (p[1] * x) + p[2]
+
+    # if any(ys .< -1 * 10.0^growth_cutoff)
+    #     return [0.0, 0.0]
+    # end
+
+    log_ys = Vector{Float64}()
+    new_xs = Vector{Float64}()
+    for i in eachindex(ys)
+        log_y = sign(ys[i]) * log(abs(ys[i]))
+        # log_y = log(abs(ys[i]))
+        if !(isnan(log_y) || isinf(log_y))
+            push!(new_xs, xs[i])
+            push!(log_ys, log_y)
+        end
+    end
+
+    fit = curve_fit(model, new_xs, log_ys, [1e-12, log_ys[1]])
+
+    # if margin_error(fit)[1] > 0.1 && xs[end] > 600
+    #     return [0.0, 0.0]
+    # end
 
     return coef(fit)
 end
@@ -113,11 +153,62 @@ function make_combo_fit_plot_axis(ax, df; num_bins=10, show_fits=true, growth_cu
     hlines!(ax, [10.0^growth_cutoff], color=:black, linestyle=:dash)
 end
 
+function make_combo_fit_plot_axis2(ax, df; num_bins=10, show_fits=true, growth_cutoff=-2, change_in_energy=true, show_negative=true, lower_ppc=nothing)
+    ax.xgridvisible = false
+    ax.ygridvisible = false
+    ax.ylabel = L"|\Delta E_\text{th}| / E_\text{th}(0)"
+
+    ynorm = df[1, :thermal_energy]
+
+    @assert show_negative
+    @assert change_in_energy
+
+    norm_energy = (df[!, :thermal_energy] .- ynorm) ./ ynorm
+    color_val = sign.(norm_energy)
+    cs = ColorScheme([colorant"blue", colorant"black"])
+    lines!(ax, df[!, :norm_time] ./ (2pi), abs.(norm_energy), color=color_val, colormap=cs, linewidth=2)
+
+    if lower_ppc !== nothing
+        ynorm2 = lower_ppc[1, :thermal_energy]
+        norm_energy2 = (lower_ppc[!, :thermal_energy] .- ynorm2) ./ ynorm2
+        color_val2 = sign.(norm_energy2)
+        cs2 = ColorScheme([alphacolor(colorant"blue", 0.5), alphacolor(colorant"black", 0.5)])
+        lines!(ax, lower_ppc[!, :norm_time] ./ (2pi), abs.(norm_energy2), color=color_val2, colormap=cs2, linewidth=2)
+    end
+
+    max_growth = 0.0
+
+    if show_fits
+        imax = findfirst(x -> x > 10.0^growth_cutoff, norm_energy)
+        if imax === nothing
+            imax = length(norm_energy)
+        end
+
+        tmin = df[imax, :norm_time] - 2*pi*10
+        imin = findfirst(x -> x > tmin, df[!, :norm_time])
+        if imin === nothing
+            imin = 1
+        end
+
+        fit = compute_fit(df[imin:imax, :norm_time], norm_energy[imin:imax]; growth_cutoff=-Inf)
+
+        @show fit
+
+        xs = [df[imin, :norm_time], df[imax, :norm_time]]
+        ys = exp_model(xs, fit)
+
+        scatterlines!(ax, xs ./ (2pi), ys, color=:red, linewidth=2, markersize=2)
+    end
+
+    # ax.title = L"\gamma / \omega_p = %$(max_growth)"
+    hlines!(ax, [10.0^growth_cutoff], color=:black, linestyle=:dash)
+end
+
 function make_fit_plot(df; num_bins=100, show_fits=false, change_in_energy=true, range=(-4, 2), growth_cutoff=-2, show_negative=false, filename="fit.pdf", lower_ppc=nothing)
     fig = Figure(size=(325, 220), fonts=(; regular="Times New Roman"), fontsize=14)
 
     ax1 = Axis(fig[1, 1], yscale=log10)
-    make_combo_fit_plot_axis(ax1, df; show_fits, num_bins, change_in_energy, growth_cutoff, show_negative, lower_ppc)
+    make_combo_fit_plot_axis2(ax1, df; show_fits, num_bins, change_in_energy, growth_cutoff, show_negative, lower_ppc)
 
     ax1.xlabel = L"t \omega_p / 2 \pi"
     ax1.limits = (nothing, (10.).^(range))
@@ -147,11 +238,24 @@ function make_combo_fit_plot(; num_bins=100, growth_cutoff=-2)
 end
 
 function compute_max_growth_rate(df; num_bins=10, growth_cutoff=-2)
-    fits = compute_fits(df, num_bins; growth_cutoff)
-    if num_bins == 1
-        return fits[1][1]
+    ynorm = df[1, :thermal_energy]
+    norm_energy = (df[!, :thermal_energy] .- ynorm) ./ ynorm
+
+    imax = findfirst(x -> x > 10.0^growth_cutoff, norm_energy)
+    if imax === nothing
+        imax = length(norm_energy)
     end
-    return max(maximum(x -> x[1], fits[2:end]), 0) / 2
+
+    tmin = df[imax, :norm_time] - 10*2*pi
+    imin = findfirst(x -> x > tmin, df[!, :norm_time])
+    if imin === nothing
+        imin = 1
+    end
+
+    fit = compute_fit(df[imin:imax, :norm_time], norm_energy[imin:imax]; growth_cutoff=Inf)
+    # fit = compute_fit(df[imin:imax, :norm_time], norm_energy[imin:imax]; growth_cutoff=-10)
+
+    return max(fit[1], 0) / 2
 end
 
 function compute_growth_rates(algo; growth_cutoff=-2, num_bins=100)
@@ -338,7 +442,7 @@ function stationary_stab_plot(algo; growth_cutoff=-2)
     save("stationary_$(algo).pdf", fig)
 end
 
-growth_cutoff = -10
+growth_cutoff = -2
 # make_combo_fit_plot(; growth_cutoff)
 # make_combo_growth_heatmap(; growth_cutoff, num_bins=100)
 # stationary_stab_plot("mcpic1"; growth_cutoff)
@@ -354,10 +458,10 @@ growth_cutoff = -10
 
 # df = CSV.read("data/algo=ecpic1_bm=0.2_tm=0.07.csv", DataFrame)
 
-# df = CSV.read("data/algo=mcpic1_bm=0.2_tm=0.08.csv", DataFrame)
-# df2 = CSV.read("data/algo=mcpic1_ppc=$(2^14)_bm=0.2_tm=0.07.csv", DataFrame)
+df = CSV.read("data/algo=mcpic1_bm=0.1_tm=0.02.csv", DataFrame)
+df2 = CSV.read("data/algo=mcpic1_ppc=$(2^14)_bm=0.1_tm=0.02.csv", DataFrame)
 
-df = CSV.read("data/algo=ecpic1_bm=0.2_tm=0.22.csv", DataFrame)
-df2 = CSV.read("data/algo=ecpic1_ppc=$(2^14)_bm=0.2_tm=0.22.csv", DataFrame)
-make_fit_plot(df, show_fits=true, growth_cutoff=-5, range=(-15,2), show_negative=true, num_bins=20, lower_ppc=df2)
+# df = CSV.read("data/algo=ecpic1_bm=0.1_tm=0.11.csv", DataFrame)
+# df2 = CSV.read("data/algo=ecpic1_ppc=$(2^14)_bm=0.1_tm=0.11.csv", DataFrame)
+make_fit_plot(df, show_fits=true, growth_cutoff=-2, range=(-15,2), show_negative=true, num_bins=20, lower_ppc=df2)
 
