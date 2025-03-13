@@ -2,26 +2,32 @@ using CSV
 using DataFrames
 using FFTW
 using CairoMakie
+using MakieExtra
 using Colors
 using ColorSchemes
 using GLM
 
-function read_data(algo, bm, tm)
-    CSV.read("data/algo=$(algo)_bm=$(bm)_tm=$(tm).csv", DataFrame)
-    # CSV.read("data20240419/algo=$(algo)_bm=$(bm)_tm=$(tm).csv", DataFrame)
+function read_data(algo, bm, tm; extended=true)
+    if extended
+        CSV.read("data/algo=$(algo)_ppc=16384_num-cells=64_bm=$(bm)_tm=$(tm).csv", DataFrame)
+    else
+        CSV.read("data/algo=$(algo)_bm=$(bm)_tm=$(tm).csv", DataFrame)
+    end
 end
 
 function compute_fit(df; growth_cutoff=1e-2)
-    ynorm = df[1, :thermal_energy]
-    df[:, :norm_thermal_energy] = (df[!, :thermal_energy] .- ynorm) ./ ynorm
+    # df[:, :total_energy] = df[!, :thermal_energy] + df[!, :beam_energy] + df[!, :field_energy]
+    # df[:, :total_energy] = df[!, :thermal_energy] + df[!, :field_energy]
+    df[:, :total_energy] = df[!, :thermal_energy]
+    ynorm = df[1, :total_energy]
+    df[:, :norm_total_energy] = (df[!, :total_energy] .- ynorm) ./ ynorm
 
-
-    imax = findfirst(x -> x > growth_cutoff, df[!, :norm_thermal_energy])
+    imax = findfirst(x -> x > growth_cutoff, df[!, :norm_total_energy])
     if imax === nothing
         imax = size(df, 1)
     end
 
-    imin = 1 + findlast(x -> x <= 0, df[!, :norm_thermal_energy])
+    imin = 1 + findlast(x -> x <= 0, df[!, :norm_total_energy])
     if imin === nothing
         imin = 1
     end
@@ -30,31 +36,37 @@ function compute_fit(df; growth_cutoff=1e-2)
         return imin:imax, nothing
     end
 
-    df[:, :log_norm_thermal_energy] = log.(abs.(df[!, :norm_thermal_energy]))
+    df[:, :log_norm_total_energy] = log.(abs.(df[!, :norm_total_energy]))
 
-    fit = lm(@formula(log_norm_thermal_energy ~ 1 + norm_time), df[imin:imax, :])
+    fit = lm(@formula(log_norm_total_energy ~ 1 + norm_time), df[imin:imax, :])
 
     return imin:imax, fit
 end
 
 @. exp_model(x, p) = exp((p[2] * x) + p[1])
 
-function make_combo_fit_plot_axis(ax, df; show_fit=true, growth_cutoff=1e-2)
+function make_combo_fit_plot_axis(ax, df; show_fit=true, show_r2=true, growth_cutoff=1e-2)
     ax.xgridvisible = false
     ax.ygridvisible = false
-    ax.ylabel = L"|\Delta E_\text{th}| / E_\text{th}(0)"
+    # ax.ylabel = L"|\Delta E| / E_0"
+    ax.ylabel = L"\mathcal{E}"
 
     ind_range, fit = compute_fit(df; growth_cutoff)
 
-    color_val = sign.(df[!, :norm_thermal_energy])
-    cs = ColorScheme([colorant"blue", colorant"black"])
-    lines!(ax, df[!, :norm_time] ./ (2pi), abs.(df[!, :norm_thermal_energy]), color=color_val, colormap=cs, linewidth=2)
+    color_val = sign.(df[!, :norm_total_energy])
+    # cs = ColorScheme([colorant"blue", colorant"black"])
+    cs = ColorScheme([colorant"black", colorant"black"])
+    # lines!(ax, df[!, :norm_time] ./ (2pi), abs.(df[!, :norm_total_energy]), color=color_val, colormap=cs, linewidth=2)
+    lines!(ax, df[!, :norm_time] ./ (2pi), df[!, :norm_total_energy], color=color_val, colormap=cs, linewidth=2)
 
     if show_fit && fit !== nothing
         xs = df[ind_range, :norm_time]
         ys = exp_model(xs, coef(fit))
 
-        scatterlines!(ax, xs ./ (2pi), ys, color=:red, linewidth=2, markersize=2)
+        scatterlines!(ax, xs ./ (2pi), ys, color=:red, linewidth=3, markersize=2)
+    end
+
+    if show_r2 && fit !== nothing
         text!(ax, 0, 1, text = L"r^2 = %$(round(r2(fit), digits=3))", space=:relative, align=(:left, :top))
     end
 
@@ -72,24 +84,53 @@ function make_fit_plot(df; show_fit=true, growth_cutoff=1e-2, range=(-15,2), fil
     save(filename, fig)
 end
 
+function symlog_tick_format(x::Real)
+    if x == 0
+        return L"0"
+    elseif x < 0
+        lx = round(Int, log10(abs(x)))
+        return L"−10^{%$(lx)}"
+    else
+        lx = round(Int, log10(abs(x)))
+        return L"10^{%$(lx)}"
+    end
+end
+
+symlog_tick_format(x::AbstractArray) = [symlog_tick_format(xi) for xi in x]
+
+import Makie: MakieCore, get_ticks
+function get_ticks(ticks_and_labels::Tuple{Any, Any}, ::SymLog, ::MakieCore.Automatic, ::Any, ::Any)
+    get_ticks(ticks_and_labels, nothing, MakieCore.Automatic(), nothing, nothing)
+end
+
 function make_combo_fit_plot(; growth_cutoff=1e-2)
-    fig = Figure(size=(325, 250), fonts=(; regular="Times New Roman"), fontsize=14)
+    # fig = Figure(size=(325, 250), fonts=(; regular="Times New Roman"), fontsize=14)
+    fig = Figure(size=(325, 350), fonts=(; regular="Times New Roman"), fontsize=14)
 
     @info "First"
-    ax1 = Axis(fig[1, 1], yscale=log10)
-    df = CSV.read("data/algo=ecpic1_bm=0.05_tm=0.01.csv", DataFrame)
-    make_combo_fit_plot_axis(ax1, df; growth_cutoff)
+    # ax1 = Axis(fig[1, 1], yscale=log10)
+    ax1 = Axis(fig[1, 1], yscale=MakieExtra.SymLog(1e-10))
+    df = read_data("ecpic1", 0.05, 0.01)
+    make_combo_fit_plot_axis(ax1, df; growth_cutoff, show_r2=false)
     ax1.xticklabelsvisible = false
     ax1.xticksvisible = false
-    ax1.limits = ((0, 100), (1e-6, 1e2))
+    # ax1.limits = ((0, 100), (1e-15, 1e2))
+    ax1.limits = ((0, 100), (-1e-5, 1e2))
+    ax1.yticks = [-1e-5, -1e-10, 1e-10, 1e-5, 1e2]
+    ax1.ytickformat = symlog_tick_format
+    # hlines!(ax1, [0.0], color=:black, linestyle=:dot, linewidth=0.5)
 
-    @info "Second"
-    ax2 = Axis(fig[2, 1], yscale=log10)
-    # ax2 = Axis(fig[2, 1]) 
-    df = CSV.read("data/algo=ecpic1_bm=0.05_tm=0.1.csv", DataFrame)
-    make_combo_fit_plot_axis(ax2, df; growth_cutoff)
+    # @info "Second"
+    # # ax2 = Axis(fig[2, 1], yscale=log10)
+    ax2 = Axis(fig[2, 1], yscale=MakieExtra.SymLog(1e-10))
+    df = read_data("ecpic1", 0.05, 0.1)
+    make_combo_fit_plot_axis(ax2, df; growth_cutoff, show_r2=false)
     ax2.xlabel = L"t \omega_p / 2 \pi"
-    ax2.limits = ((0, 100), (1e-6, 1e2))
+    # ax2.limits = ((0, 100), (1e-15, 1e2))
+    ax2.limits = ((0, 100), (-1e-5, 1e2))
+    ax2.yticks = [-1e-5, -1e-10, 1e-10, 1e-5, 1e2]
+    ax2.ytickformat = symlog_tick_format
+    # hlines!(ax2, [0.0], color=:black, linestyle=:dot, linewidth=0.5)
 
     save("combo_fit.pdf", fig)
 end
@@ -102,12 +143,13 @@ function compute_growth_rate(df; growth_cutoff=1e-2, r2_cutoff=0.5)
     end
 
     if (df[last(ind_range), :norm_time] - df[first(ind_range), :norm_time]) / (2pi) < 10
-        if df[end, :norm_thermal_energy] < growth_cutoff
+        if df[end, :norm_total_energy] < growth_cutoff
             return 0.0
         end
     end
 
     if r2(fit) < r2_cutoff
+        @warn "R^2 below cutoff" r2(fit)
         return 0.0
     end
 
@@ -122,7 +164,8 @@ end
 
 function compute_growth_rates(algo; growth_cutoff=1e-2, r2_cutoff=0.9)
     norm_beam_vels = collect(range(0.0, 0.45, step=0.01))
-    norm_therm_vels = collect(range(0.01, 0.25, step=0.01))
+    # norm_therm_vels = collect(range(0.01, 0.25, step=0.01))
+    norm_therm_vels = collect(range(0.01, 0.35, step=0.01))
 
     growth_rates = Matrix{Float64}(undef, length(norm_therm_vels), length(norm_beam_vels))
 
@@ -238,15 +281,15 @@ function make_combo_growth_heatmap(; growth_cutoff=1e-2, r2_cutoff=0.9)
     save("combo_growth_heatmap.pdf", fig)
 end
 
-function compute_stationary_growth_rates(algo, ppc; norm_therm_vels = collect(range(0.01, 0.3, step=0.01)), num_bins=10, growth_cutoff=-2, init_strat="beam")
+function compute_stationary_growth_rates(algo; norm_therm_vels = collect(range(0.01, 0.35, step=0.01)),
+                                         growth_cutoff=-2, r2_cutoff=0.9)
     growth_rates = Vector{Float64}(undef, length(norm_therm_vels))
 
     for (i, norm_therm_vel) = enumerate(norm_therm_vels)
         try
-            df = CSV.read("data/algo=$(algo)_bm=0.0_tm=$(norm_therm_vel)_ppc=$(ppc)_init_strat=$(init_strat).csv", DataFrame)
-            # df = CSV.read("data/algo=$(algo)_bm=0.0_tm=$(norm_therm_vel)_ppc=$(ppc).csv", DataFrame)
-            # df = CSV.read("data20241213/algo=$(algo)_bm=0.0_tm=$(norm_therm_vel)_ppc=$(ppc).csv", DataFrame)
-            growth_rate = compute_max_growth_rate(df; num_bins, growth_cutoff)
+            df = CSV.read("data/algo=$(algo)_bm=0.0_tm=$(norm_therm_vel).csv", DataFrame)
+            @info "Computing growth rate" algo norm_therm_vel
+            growth_rate = compute_growth_rate(df; growth_cutoff, r2_cutoff)
 
             if growth_rate < 0
                 @warn "Negative growth rate" norm_therm_vel growth_rate
@@ -262,42 +305,27 @@ function compute_stationary_growth_rates(algo, ppc; norm_therm_vels = collect(ra
     return norm_therm_vels, growth_rates
 end
 
-function stationary_stab_plot(algo; growth_cutoff=-2)
+function stationary_stab_plot(algo; growth_cutoff=-2, r2_cutoff=0.9)
     fig = Figure(size=(325, 300), fonts=(; regular="Times New Roman"), fontsize=14)
 
     ax1 = Axis(fig[1, 1], yscale=log10)
 
-    # ppcs = [1000, 10000, 100000, 1000000]
-    # limits = [-1, -2, -3, -4]
-    # ppcs = [2^10, 2^12, 2^14, 2^16, 2^18, 2^20]
-    # limits = [-3, -3, -3, -3, -3, -6]
-    ppcs = [2^16]
-    limits = [-6]
+    norm_therm_vels, growth_rates = compute_stationary_growth_rates(algo; growth_cutoff, r2_cutoff)
+    lines!(ax1, norm_therm_vels, growth_rates)
 
-    for (ppc, limit) in zip(ppcs, limits)
-        norm_therm_vels, growth_rates = compute_stationary_growth_rates(algo, ppc; growth_cutoff=limit)
-        # growth_rates = [g == 0 ? 1e-9 : g for g in growth_rates]
-        # @info "Growth rates" ppc limit norm_therm_vels growth_rates
-        ppc_exp10 = round(log10(ppc), digits=1)
-        ppc_exp2 = round(Int, log2(ppc))
-        lines!(ax1, norm_therm_vels, growth_rates, label=L"\textrm{ppc}=2^{%$(ppc_exp2)} \approx 10^{%$(ppc_exp10)}")
-    end
-
-    ax1.xlabel = L"\bar{v}_t"
+    ax1.xlabel = L"\bar{v}_t = \lambda_D / \Delta x"
     ax1.ylabel = L"\gamma / \omega_p"
 
-    ax1.limits = ((0.0, 0.3), (1e-3, 1e-1))
-
-    axislegend(ax1)
+    ax1.limits = ((0.0, 0.2), (1e-3, 1e-1))
 
     save("stationary_$(algo).pdf", fig)
 end
 
-growth_cutoff = 0.01
-r2_cutoff = 0.75
-# make_combo_fit_plot(; growth_cutoff)
-make_combo_growth_heatmap(; growth_cutoff, r2_cutoff)
-# stationary_stab_plot("mcpic1"; growth_cutoff)
+growth_cutoff = 1e-2
+r2_cutoff = 0.9
+make_combo_fit_plot(; growth_cutoff)
+# make_combo_growth_heatmap(; growth_cutoff, r2_cutoff)
+# stationary_stab_plot("mcpic1_ppc=$(2^16)_num-cells=64"; growth_cutoff, r2_cutoff)
 
 # Noise, but with an r value above 0.95
 # df = read_data("ecpic1", 0.45, 0.21)
@@ -312,12 +340,14 @@ make_combo_growth_heatmap(; growth_cutoff, r2_cutoff)
 # @show ind_range fit
 # make_fit_plot(df)
 
-function lineout_fit_plot(sims; growth_cutoff=1e-2, range=(-15,2))
+function lineout_fit_plot(sims; growth_cutoff=1e-5, range=(-15,2))
     height = length(sims) * 100
     fig = Figure(size=(325, height), fonts=(; regular="Times New Roman"), fontsize=14)
 
     for (i, sim) in enumerate(sims)
         name, df = sim
+        df === nothing && continue
+
         ax = Axis(fig[i, 1], yscale=log10, xticklabelsvisible=false, xticksvisible=false)
         make_combo_fit_plot_axis(ax, df; growth_cutoff)
         text!(ax, 1, 1, text = name, space=:relative, align=(:right, :top))
@@ -328,8 +358,52 @@ function lineout_fit_plot(sims; growth_cutoff=1e-2, range=(-15,2))
 end
 
 function read_data2(algo, bm, tm)
-    return (L"\bar{v}_t = %$(tm)", read_data(algo, bm, tm))
+    try
+        return (L"\bar{v}_t = %$(tm)", read_data(algo, bm, tm; extended=false))
+    catch err
+        return (nothing, nothing)
+    end
 end
 
-dfs = [read_data2("mcpic1", 0.0, tm) for tm in range(0.25, 0.01, step=-0.01)]
-lineout_fit_plot(dfs)
+function lineout_fit_plot2(sims, sims2; growth_cutoff=1e-2, range=(-15,2))
+    height = length(sims) * 100
+    fig = Figure(size=(325 * 2, height), fonts=(; regular="Times New Roman"), fontsize=14)
+
+    for (i, sim) in enumerate(sims)
+        name, df = sim
+        if df !== nothing
+            ax = Axis(fig[i, 1], yscale=log10)
+            make_combo_fit_plot_axis(ax, df; growth_cutoff)
+            text!(ax, 1, 1, text = name, space=:relative, align=(:right, :top))
+            ax.limits = (nothing, (10.).^(range))
+
+            if i != length(sims)
+                ax.xticklabelsvisible = false
+                ax.xticksvisible = false
+            end
+        end
+
+        name2, df2 = sims2[i]
+        if df2 !== nothing
+            ax = Axis(fig[i, 2], yscale=log10)
+            make_combo_fit_plot_axis(ax, df2; growth_cutoff)
+            text!(ax, 1, 1, text = name2, space=:relative, align=(:right, :top))
+            ax.limits = (nothing, (10.).^(range))
+
+            if i != length(sims)
+                ax.xticklabelsvisible = false
+                ax.xticksvisible = false
+            end
+        end
+    end
+
+    save("fit_lineout_comparison.pdf", fig)
+end
+
+# dfs = [read_data2("mcpic1_ppc=$(2^14)_num-cells=64", 0.0, tm) for tm in range(0.3, 0.01, step=-0.01)]
+# dfs2 = [read_data2("mcpic1_ppc=$(2^16)_num-cells=64", 0.0, tm) for tm in range(0.3, 0.01, step=-0.01)]
+# lineout_fit_plot2(dfs, dfs2; growth_cutoff)
+# lineout_fit_plot(dfs)
+
+# dfs = [read_data2("ecpic1_ppc=$(2^12)_num-cells=256", 0.35, tm) for tm in range(0.35, 0.01, step=-0.01)]
+# lineout_fit_plot(dfs)

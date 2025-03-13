@@ -22,21 +22,22 @@ end
 function make_algo_data(sim_func, algo_name; norm_num_macros=2^14, num_cells=16, init_strat="beam")
     mkpath("data")
 
-    norm_beam_vels = collect(range(0.0, 0.45, step=0.01))
+    # norm_beam_vels = collect(range(0.0, 0.45, step=0.01))
+    norm_beam_vels = [0.0]
     norm_therm_vels = collect(range(0.0, 0.25, step=0.01))
 
     @sync @distributed for (norm_beam_vel, norm_therm_vel) = collect(Iterators.product(norm_beam_vels, norm_therm_vels))
-        df = run_simulation(sim_func, norm_therm_vel, norm_beam_vel; norm_num_macros, norm_perturb_vel=1e-8, num_periods=100, init_strat, perturb_all_wavenumbers=true, num_cells)
+        df = run_simulation(sim_func, norm_therm_vel, norm_beam_vel; norm_num_macros, norm_perturb_vel=1e-8, num_periods=1000, init_strat, perturb_all_wavenumbers=true, num_cells)
 
         CSV.write("data/algo=$(algo_name)_ppc=$(norm_num_macros)_bm=$(norm_beam_vel)_tm=$(norm_therm_vel).csv", df)
     end
 end
 make_algo_data(mcpic1_sim_func, "mcpic1")
-make_algo_data(ecpic1_sim_func, "ecpic1")
-make_algo_data(ecpic2_sim_func, "ecpic2")
-make_algo_data(ecpic2_new_sim_func, "ecpic2_new")
-make_algo_data(ecpic2_five_sim_func, "ecpic2_five")
-make_algo_data(pics_sim_func, "pics")
+# make_algo_data(ecpic1_sim_func, "ecpic1")
+# make_algo_data(ecpic2_sim_func, "ecpic2")
+# make_algo_data(ecpic2_new_sim_func, "ecpic2_new")
+# make_algo_data(ecpic2_five_sim_func, "ecpic2_five")
+# make_algo_data(pics_sim_func, "pics")
 
 function make_stationary_algo_data(sim_func, algo_name; norm_num_macros=1000, num_cells=16, norm_dt=0.1, init_strat="quiet")
     mkpath("data")
